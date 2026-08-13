@@ -22,9 +22,10 @@ export const Avatars = () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      // 1. Fetch saved Avatar Scenarios
+      // 1. Fetch saved Avatar Scenarios — only READY ones are real, usable HeyGen avatars
       const resSc = await avatarScenarioApi.list().catch(() => ({ data: [] }));
-      setScenarios(Array.isArray(resSc.data) ? resSc.data : []);
+      const allScenarios = Array.isArray(resSc.data) ? resSc.data : [];
+      setScenarios(allScenarios.filter((s) => s.creation_status === 'READY'));
 
       // 2. Fetch HeyGen catalog
       const resHg = await heyGenApi.getAvatars().catch(() => ({ data: { avatars: [] } }));

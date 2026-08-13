@@ -83,6 +83,42 @@ class HeyGenService:
                 return inner_data
             return []
 
+    async def list_avatar_looks(
+        self,
+        ownership: str = "public",
+        avatar_type: Optional[str] = None,
+        limit: int = 50,
+        token: Optional[str] = None,
+        group_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Lists real HeyGen Avatar Looks via GET /v3/avatars/looks.
+        Supports HeyGen's documented cursor-based pagination (has_more/next_token).
+        """
+        url = f"{self.base_url}/v3/avatars/looks"
+        headers = self._get_headers()
+
+        params: Dict[str, Any] = {"ownership": ownership, "limit": max(1, min(limit, 50))}
+        if avatar_type:
+            params["avatar_type"] = avatar_type
+        if group_id:
+            params["group_id"] = group_id
+        if token:
+            params["token"] = token
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            if response.status_code != 200:
+                logger.error(f"HeyGen list_avatar_looks failed with HTTP {response.status_code}: {response.text}")
+                raise RuntimeError(f"HeyGen API Error ({response.status_code}): {response.text}")
+
+            res_json = response.json()
+            return {
+                "data": res_json.get("data", []),
+                "has_more": res_json.get("has_more", False),
+                "next_token": res_json.get("next_token")
+            }
+
     async def upload_asset_bytes(self, file_bytes: bytes, content_type: str = "image/jpeg") -> Dict[str, Any]:
         """
         Uploads raw image file bytes to HeyGen Asset service.
@@ -256,12 +292,19 @@ class HeyGenService:
             else:
                 status = "processing"
 
+            error_obj = data.get("error") or avatar_item.get("error")
+            error_message = None
+            if isinstance(error_obj, dict):
+                error_message = error_obj.get("message") or error_obj.get("code")
+            elif error_obj:
+                error_message = str(error_obj)
+
             return {
                 "look_id": look_id,
                 "status": status,
                 "raw_status": raw_status,
                 "preview_image_url": preview_url,
-                "error": data.get("error") or avatar_item.get("error")
+                "error": error_message
             }
 
     async def create_photo_avatar(self, photo_url: str, name: Optional[str] = None) -> Dict[str, Any]:

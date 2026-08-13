@@ -103,6 +103,7 @@ export const heyGenApi = {
   getAvatars: () => apiClient.get('/heygen/avatars'),
   getAvatarsV3: () => apiClient.get('/heygen/avatars-v3'),
   getVoices: () => apiClient.get('/heygen/voices'),
+  listAvatarLooks: (params) => apiClient.get('/heygen/avatar-looks', { params }),
   uploadPhotoAvatar: (formData) => apiClient.post('/heygen/photo-avatar', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })

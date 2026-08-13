@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { doctorApi, avatarLookApi, avatarScenarioApi } from '../api/client';
+import { doctorApi, heyGenApi, avatarScenarioApi } from '../api/client';
 import {
   Sparkles,
   Upload,
@@ -12,7 +12,8 @@ import {
   ArrowRight,
   ImageIcon,
   Clock,
-  RefreshCw
+  RefreshCw,
+  Tag
 } from 'lucide-react';
 
 export const CreateAvatar = () => {
@@ -27,6 +28,8 @@ export const CreateAvatar = () => {
   const [doctors, setDoctors] = useState([]);
   const [looks, setLooks] = useState([]);
   const [loadingLooks, setLoadingLooks] = useState(true);
+  const [looksError, setLooksError] = useState(null);
+  const [visibleLooksCount, setVisibleLooksCount] = useState(12);
 
   // Selected State
   const [selectedDoctorId, setSelectedDoctorId] = useState(currentDoctor?.id || '');
@@ -35,7 +38,9 @@ export const CreateAvatar = () => {
   // Photo & Scenario State
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState(null);
+  const [originalPhotoPreviewUrl, setOriginalPhotoPreviewUrl] = useState(null);
   const [scenarioId, setScenarioId] = useState(null);
+  const [avatarScenarioBusinessId, setAvatarScenarioBusinessId] = useState(null);
   const [baseLookId, setBaseLookId] = useState(null);
   const [generatedLookId, setGeneratedLookId] = useState(null);
   const [realPreviewUrl, setRealPreviewUrl] = useState(null);
@@ -56,32 +61,63 @@ export const CreateAvatar = () => {
 
   const fetchInitialData = async () => {
     setLoadingLooks(true);
+    setLooksError(null);
     try {
-      const [docsRes, looksRes] = await Promise.all([
-        doctorApi.list().catch(() => ({ data: [] })),
-        avatarLookApi.list().catch(() => ({ data: [] }))
-      ]);
-
+      const docsRes = await doctorApi.list().catch(() => ({ data: [] }));
       const docList = Array.isArray(docsRes.data) ? docsRes.data : [];
       setDoctors(docList);
       if (docList.length > 0 && !selectedDoctorId) {
         setSelectedDoctorId(docList[0].id);
         if (!currentDoctor) setCurrentDoctor(docList[0]);
       }
-
-      const lookList = Array.isArray(looksRes.data) ? looksRes.data : [];
-      setLooks(lookList);
     } catch (err) {
-      setErrorMessage(err.message || 'Failed to load doctor profiles or Look presets.');
+      setErrorMessage(err.message || 'Failed to load doctor profiles.');
+    }
+
+    // Real HeyGen Avatar Look library — GET /v3/avatars/looks via PointBlank backend.
+    // Backend aggregates photo_avatar + studio_avatar presets, ranks by real
+    // professional-appearance signal, and interleaves by gender.
+    try {
+      const looksRes = await heyGenApi.listAvatarLooks({ ownership: 'public' });
+      const lookList = Array.isArray(looksRes.data?.data) ? looksRes.data.data : [];
+      setLooks(lookList);
+      setVisibleLooksCount(12);
+    } catch (err) {
+      console.error(err);
+      setLooksError('Unable to load HeyGen avatar looks. Please try again.');
     } finally {
       setLoadingLooks(false);
     }
   };
 
+  const handleLoadMoreLooks = () => {
+    setVisibleLooksCount((prev) => Math.min(prev + 12, looks.length));
+  };
+
   const handleDoctorChange = (docId) => {
-    setSelectedDoctorId(docId);
     const doc = doctors.find((d) => d.id === docId);
+    const isDoctorSwitch = docId !== selectedDoctorId;
+
+    setSelectedDoctorId(docId);
     if (doc) setCurrentDoctor(doc);
+
+    if (isDoctorSwitch) {
+      // Avoid mixing another doctor's in-progress photo/scenario with the newly selected doctor
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      setSelectedLook(null);
+      setPhotoFile(null);
+      setPhotoPreviewUrl(null);
+      setOriginalPhotoPreviewUrl(null);
+      setScenarioId(null);
+      setAvatarScenarioBusinessId(null);
+      setBaseLookId(null);
+      setGeneratedLookId(null);
+      setRealPreviewUrl(null);
+      setIsBaseReady(false);
+      setIsProcessing(false);
+      setErrorMessage(null);
+      setInternalStep(1);
+    }
   };
 
   // Step 1 -> Step 2
@@ -102,7 +138,7 @@ export const CreateAvatar = () => {
 
   const handleProceedToUpload = () => {
     if (!selectedLook) {
-      setErrorMessage('Please select a professional Look preset first.');
+      setErrorMessage('Please select a HeyGen Avatar Look first.');
       return;
     }
     setErrorMessage(null);
@@ -129,6 +165,7 @@ export const CreateAvatar = () => {
     setPhotoFile(file);
     const objectUrl = URL.createObjectURL(file);
     setPhotoPreviewUrl(objectUrl);
+    setOriginalPhotoPreviewUrl(objectUrl);
   };
 
   // Step 3 -> 4: Create Base Photo Avatar and poll until BASE_READY
@@ -154,6 +191,7 @@ export const CreateAvatar = () => {
       const uploadRes = await avatarScenarioApi.uploadPhoto(uploadFd);
       const scId = uploadRes.data.scenario_id;
       setScenarioId(scId);
+      setAvatarScenarioBusinessId(uploadRes.data.avatar_scenario_id || null);
 
       // 2. Submit Base Avatar Request (POST /v3/avatars type=photo)
       setProcessingStatusText('Creating base doctor avatar on HeyGen...');
@@ -225,7 +263,17 @@ export const CreateAvatar = () => {
       const lookFd = new FormData();
       lookFd.append('scenario_id', scenarioId);
       lookFd.append('doctor_id', selectedDoctorId);
-      lookFd.append('look_id', selectedLook.id);
+      lookFd.append('heygen_look_id', selectedLook.id);
+      lookFd.append('heygen_look_name', selectedLook.name || '');
+      if (selectedLook.preview_image_url) {
+        lookFd.append('heygen_look_preview_image_url', selectedLook.preview_image_url);
+      }
+      if (selectedLook.avatar_type) {
+        lookFd.append('heygen_look_avatar_type', selectedLook.avatar_type);
+      }
+      if (Array.isArray(selectedLook.tags) && selectedLook.tags.length > 0) {
+        lookFd.append('heygen_look_tags', selectedLook.tags.join(','));
+      }
 
       const lookRes = await avatarScenarioApi.generateLook(lookFd);
       const gLookId = lookRes.data.heygen_look_id;
@@ -287,7 +335,7 @@ export const CreateAvatar = () => {
 
   const stepsList = [
     { num: 1, label: 'Doctor' },
-    { num: 2, label: 'Select Look' },
+    { num: 2, label: 'HeyGen Look' },
     { num: 3, label: 'Upload Photo' },
     { num: 4, label: 'Base Avatar' },
     { num: 5, label: 'HeyGen Look' },
@@ -422,94 +470,122 @@ export const CreateAvatar = () => {
               onClick={handleProceedToLook}
               className="px-8 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-extrabold text-xs shadow-md shadow-[#005570]/20 flex items-center space-x-2"
             >
-              <span>Continue to Look Presets →</span>
+              <span>Continue to HeyGen Looks →</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 2: LOOK LIBRARY */}
+      {/* STEP 2: HEYGEN AVATAR LOOK LIBRARY (real GET /v3/avatars/looks) */}
       {internalStep === 2 && (
         <div className="space-y-6">
           <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
               <span className="text-xs font-bold text-[#005570] uppercase tracking-wider">Step 2 of 6</span>
-              <h2 className="text-xl font-bold text-slate-900">Select Professional Look Preset</h2>
+              <h2 className="text-xl font-bold text-slate-900">HeyGen Avatar Looks</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Real HeyGen preset looks (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">GET /v3/avatars/looks</code>). Select the style HeyGen should apply to the doctor's photo.
+              </p>
             </div>
-            <button onClick={() => setInternalStep(1)} className="text-xs font-bold text-[#005570] hover:underline">
+            <button onClick={() => setInternalStep(1)} className="text-xs font-bold text-[#005570] hover:underline shrink-0">
               ← Back to Doctor Selection
             </button>
           </div>
 
+          {looksError && (
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{looksError}</span>
+            </div>
+          )}
+
           {loadingLooks ? (
             <div className="p-16 text-center text-slate-500 flex flex-col items-center space-y-3">
               <Loader2 className="w-8 h-8 animate-spin text-[#005570]" />
-              <p className="text-xs font-medium">Loading Look Presets...</p>
+              <p className="text-xs font-medium">Loading HeyGen Looks...</p>
             </div>
+          ) : looks.length === 0 ? (
+            !looksError && (
+              <div className="p-12 text-center bg-white border border-slate-200 rounded-2xl text-slate-500">
+                <ImageIcon className="w-10 h-10 mx-auto text-slate-300 mb-3" />
+                <p className="text-sm font-bold text-slate-700">No HeyGen avatar looks are currently available.</p>
+              </div>
+            )
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {looks.map((look) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {looks.slice(0, visibleLooksCount).map((look) => {
                 const isSelected = selectedLook?.id === look.id;
-                const lookImgUrl = look.preview_image_url || `/uploads/look_previews/${look.name.toLowerCase().replace(/\s+/g, '_')}.jpg`;
+                const realTags = Array.isArray(look.tags)
+                  ? look.tags.filter((t) => t && !String(t).startsWith('AvatarTags.'))
+                  : [];
                 return (
                   <div
                     key={look.id}
                     onClick={() => handleSelectLook(look)}
-                    className={`cursor-pointer rounded-3xl border p-5 bg-white transition-all flex flex-col justify-between hover:border-[#007799] ${
+                    className={`cursor-pointer rounded-2xl border bg-white transition-all overflow-hidden flex flex-col hover:border-[#007799] ${
                       isSelected
-                        ? 'border-[#005570] ring-2 ring-[#005570]/30 shadow-lg bg-gradient-to-b from-teal-50/20 to-white'
+                        ? 'border-[#005570] ring-2 ring-[#005570]/30 shadow-lg'
                         : 'border-slate-200 hover:shadow-md'
                     }`}
                   >
-                    <div className="space-y-4">
-                      {/* Look Preview Picture Container */}
-                      <div className="aspect-3/4 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 relative group shadow-xs">
+                    {/* Real HeyGen Preview Image — wide rectangular, uncropped face/upper body */}
+                    <div className="aspect-video bg-slate-100 relative group overflow-hidden">
+                      {look.preview_image_url ? (
                         <img
-                          src={lookImgUrl}
+                          src={look.preview_image_url}
                           alt={look.name}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = '/uploads/look_previews/professional_doctor.jpg';
-                          }}
                         />
-                        <div className="absolute top-3 left-3 px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold bg-black/60 text-white backdrop-blur-xs border border-white/20">
-                          {look.look_id}
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-slate-400">
+                          <ImageIcon className="w-8 h-8" />
                         </div>
-                        <div className="absolute top-3 right-3 px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold bg-[#E6F3F7] text-[#005570] border border-[#007799]/30">
-                          {look.aspect_ratio || '16:9'}
+                      )}
+                      {isSelected && (
+                        <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-[#005570] text-white flex items-center justify-center shadow-md">
+                          <CheckCircle2 className="w-4 h-4" />
                         </div>
-                      </div>
-
-                      <div>
-                        <h3 className="font-extrabold text-slate-900 text-base flex items-center justify-between">
-                          <span>{look.name}</span>
-                          {isSelected && <CheckCircle2 className="w-4 h-4 text-[#005570]" />}
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{look.description}</p>
-                      </div>
-
-                      <div className="pt-2 text-[11px] text-slate-600 space-y-1 border-t border-slate-100">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Clothing:</span>
-                          <strong className="text-slate-900 truncate max-w-[160px]">{look.clothing_style || 'Professional Attire'}</strong>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Lighting:</span>
-                          <strong className="text-slate-900 truncate max-w-[160px]">{look.lighting_style || 'Soft Studio'}</strong>
-                        </div>
-                      </div>
+                      )}
                     </div>
 
-                    <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <span className={`text-xs font-extrabold ${isSelected ? 'text-[#005570]' : 'text-slate-500'}`}>
-                        {isSelected ? '✓ Selected Look' : 'Select Look'}
-                      </span>
-                      <ArrowRight className={`w-4 h-4 ${isSelected ? 'text-[#005570]' : 'text-slate-400'}`} />
+                    <div className="p-4 flex flex-col grow">
+                      <h3 className="font-extrabold text-slate-900 text-sm truncate">{look.name}</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5 capitalize">
+                        {[look.gender, look.avatar_type?.replace('_', ' ')].filter(Boolean).join(' · ')}
+                      </p>
+                      {realTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {realTags.slice(0, 3).map((t) => (
+                            <span key={t} className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E6F3F7] text-[#005570]">
+                              <Tag className="w-2.5 h-2.5" />
+                              <span>{t}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <span className={`text-xs font-extrabold ${isSelected ? 'text-[#005570]' : 'text-slate-500'}`}>
+                          {isSelected ? '✓ Selected' : 'Select Look'}
+                        </span>
+                        <ArrowRight className={`w-4 h-4 ${isSelected ? 'text-[#005570]' : 'text-slate-400'}`} />
+                      </div>
                     </div>
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {!loadingLooks && visibleLooksCount < looks.length && (
+            <div className="flex justify-center">
+              <button
+                onClick={handleLoadMoreLooks}
+                className="px-6 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-xs flex items-center space-x-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Load More Looks</span>
+              </button>
             </div>
           )}
 
@@ -539,18 +615,27 @@ export const CreateAvatar = () => {
           </div>
 
           <div className="p-4 rounded-2xl bg-[#E6F3F7] border border-[#007799]/20 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-[#005570] text-white flex items-center justify-center font-mono font-bold text-xs">
-                {selectedLook?.look_id}
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-[#007799]/20 shrink-0">
+                {selectedLook?.preview_image_url ? (
+                  <img src={selectedLook.preview_image_url} alt={selectedLook?.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[#005570]">
+                    <ImageIcon className="w-5 h-5" />
+                  </div>
+                )}
               </div>
-              <div>
-                <p className="text-xs font-bold text-[#005570] uppercase tracking-wider">Selected Look Preset</p>
-                <p className="text-sm font-extrabold text-slate-900">{selectedLook?.name}</p>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[#005570] uppercase tracking-wider">Selected HeyGen Look</p>
+                <p className="text-sm font-extrabold text-slate-900 truncate">{selectedLook?.name}</p>
+                <p className="text-[10px] text-slate-500 font-mono truncate">HeyGen Look ID: {selectedLook?.id}</p>
               </div>
             </div>
-            <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-white text-[#005570] border border-[#007799]/20">
-              {selectedLook?.aspect_ratio}
-            </span>
+            {selectedLook?.avatar_type && (
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-white text-[#005570] border border-[#007799]/20 shrink-0">
+                {selectedLook.avatar_type}
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
@@ -690,14 +775,29 @@ export const CreateAvatar = () => {
             </span>
           </div>
 
-          {/* Real HeyGen Preview Image */}
+          {/* Original Photo vs Real HeyGen Generated Avatar */}
           <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-md space-y-6 text-center">
-            <div className="max-w-md mx-auto aspect-3/4 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 shadow-xs relative">
-              <img
-                src={realPreviewUrl || photoPreviewUrl}
-                alt="Real HeyGen Generated Avatar"
-                className="w-full h-full object-contain"
-              />
+            <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Original Photo</span>
+                <div className="aspect-3/4 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
+                  <img
+                    src={originalPhotoPreviewUrl}
+                    alt="Original Doctor Photo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-[#005570] uppercase tracking-wider block mb-2">Generated Avatar (HeyGen)</span>
+                <div className="aspect-3/4 bg-slate-100 rounded-2xl overflow-hidden border border-[#007799]/40 shadow-xs">
+                  <img
+                    src={realPreviewUrl}
+                    alt="Real HeyGen Generated Avatar"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-left grid grid-cols-2 gap-4">
@@ -710,7 +810,11 @@ export const CreateAvatar = () => {
                 <strong className="text-[#005570]">{selectedLook?.name}</strong>
               </div>
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">HeyGen Look ID</span>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">PointBlank Avatar ID</span>
+                <strong className="text-slate-900 font-mono text-[11px] truncate block">{avatarScenarioBusinessId || '—'}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Real HeyGen Look ID</span>
                 <strong className="text-slate-900 font-mono text-[11px] truncate block">{generatedLookId || baseLookId}</strong>
               </div>
               <div>

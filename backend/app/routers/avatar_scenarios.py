@@ -17,6 +17,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/avatar-scenarios", tags=["Avatar Scenarios"])
 
 
+def _detect_image_content_type(file_bytes: bytes) -> Optional[str]:
+    """
+    Determines the REAL image MIME type from the actual file bytes (magic-number
+    signature), not the filename extension or a client-declared header. HeyGen's
+    asset upload rejects requests where the declared Content-Type disagrees with
+    the actual bytes, so this must be authoritative before every upload.
+    """
+    if file_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 @router.post("/upload-photo")
 async def upload_doctor_photo(
     file: UploadFile = File(...),
@@ -34,9 +50,9 @@ async def upload_doctor_photo(
     if current_user.role != "ADMIN" and doctor.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied to doctor profile.")
 
-    content_type = file.content_type or ""
+    declared_content_type = (file.content_type or "").lower()
     allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
-    if content_type.lower() not in allowed_types:
+    if declared_content_type not in allowed_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Please upload a portrait photo in JPG, PNG, or WEBP format."
@@ -49,7 +65,15 @@ async def upload_doctor_photo(
             detail="Photo file size exceeds 15MB limit."
         )
 
-    ext = content_type.split("/")[-1] if "/" in content_type else "jpg"
+    # Never trust the filename/declared header alone — verify against the actual bytes.
+    real_content_type = _detect_image_content_type(file_bytes)
+    if not real_content_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to verify image format. Please upload a valid JPG, PNG, or WEBP photo."
+        )
+
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[real_content_type]
     filename = f"doctor_photo_{uuid.uuid4().hex[:10]}.{ext}"
     local_dir = os.path.join(settings.STORAGE_DIR, "original_photos")
     os.makedirs(local_dir, exist_ok=True)
@@ -115,12 +139,22 @@ async def create_base_avatar(
     with open(local_path, "rb") as f:
         file_bytes = f.read()
 
+    # Detect the REAL content type from the actual bytes — never hardcode this.
+    # A mismatch here (declaring image/jpeg for bytes that are actually PNG/WEBP)
+    # is exactly what HeyGen's asset upload rejects with a 400 content-type error.
+    real_content_type = _detect_image_content_type(file_bytes)
+    if not real_content_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Stored photo '{filename}' is not a valid JPG, PNG, or WEBP image."
+        )
+
     scenario.creation_status = "BASE_CREATING"
     db.commit()
 
     try:
-        # Step A1: Upload photo to HeyGen asset service
-        asset_info = await heygen_service.upload_asset_bytes(file_bytes, content_type="image/jpeg")
+        # Step A1: Upload photo to HeyGen asset service (Content-Type matches actual bytes)
+        asset_info = await heygen_service.upload_asset_bytes(file_bytes, content_type=real_content_type)
         photo_cdn_url = asset_info.get("url") or scenario.original_photo_url
 
         # Step A2: Call HeyGen POST /v3/avatars (type=photo)
@@ -161,13 +195,22 @@ async def create_base_avatar(
 async def generate_look_for_avatar(
     scenario_id: str = Form(...),
     doctor_id: str = Form(...),
-    look_id: str = Form(...),
+    look_id: Optional[str] = Form(None),
+    heygen_look_id: Optional[str] = Form(None),
+    heygen_look_name: Optional[str] = Form(None),
+    heygen_look_preview_image_url: Optional[str] = Form(None),
+    heygen_look_tags: Optional[str] = Form(None),
+    heygen_look_avatar_type: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Step 3: Triggers HeyGen Look Generation via POST /v3/avatars (type=prompt).
     Guarded: MUST wait until base avatar reaches BASE_READY.
+
+    Accepts either a real HeyGen public Avatar Look (heygen_look_* fields, the
+    current Create Avatar workflow) or, for backward compatibility, a legacy
+    PointBlank AvatarLook preset (look_id).
     """
     scenario = db.query(AvatarScenario).filter(AvatarScenario.id == scenario_id).first()
     if not scenario:
@@ -186,24 +229,51 @@ async def generate_look_for_avatar(
             detail="Your base avatar is still being prepared by HeyGen. Please wait while we finish preparing it."
         )
 
-    look = db.query(AvatarLook).filter(
-        (AvatarLook.id == look_id) | (AvatarLook.look_id == look_id)
-    ).first()
-    if not look or not look.is_active:
-        raise HTTPException(status_code=404, detail="Selected PointBlank Look preset not found.")
-
-    prompt_text = look.transformation_prompt or f"Professional medical doctor portrait of {scenario.doctor.doctor_name}"
-
     ref_images = []
-    if look.preview_image_url and look.preview_image_url.startswith("http"):
-        ref_images.append(look.preview_image_url)
 
-    scenario.look_id = look.id
-    scenario.name = f"{scenario.doctor.doctor_name} — {look.name}"
-    scenario.background_type = look.background_type or "clinic"
-    scenario.background_value = look.background_value or "#FAFAFA"
-    scenario.framing = look.camera_framing or "medium"
-    scenario.aspect_ratio = look.aspect_ratio or "16:9"
+    if heygen_look_name or heygen_look_id:
+        # Real HeyGen public Avatar Look selected in Step 2 of Create Avatar.
+        tag_list = [t.strip() for t in heygen_look_tags.split(",") if t.strip()] if heygen_look_tags else []
+        tag_suffix = f" ({', '.join(tag_list)})" if tag_list else ""
+        prompt_text = (
+            f"A professional avatar look styled as '{heygen_look_name or 'Professional'}'{tag_suffix}. "
+            f"Preserve facial identity, skin tone, facial features, and structure completely."
+        )
+        if heygen_look_preview_image_url and heygen_look_preview_image_url.startswith("http"):
+            ref_images.append(heygen_look_preview_image_url)
+
+        scenario.look_id = None
+        scenario.name = f"{scenario.doctor.doctor_name} — {heygen_look_name or 'HeyGen Look'}"
+        scenario.metadata_json = {
+            "heygen_selected_look": {
+                "id": heygen_look_id,
+                "name": heygen_look_name,
+                "preview_image_url": heygen_look_preview_image_url,
+                "avatar_type": heygen_look_avatar_type,
+                "tags": tag_list
+            }
+        }
+    elif look_id:
+        # Legacy PointBlank AvatarLook preset (backward compatibility).
+        look = db.query(AvatarLook).filter(
+            (AvatarLook.id == look_id) | (AvatarLook.look_id == look_id)
+        ).first()
+        if not look or not look.is_active:
+            raise HTTPException(status_code=404, detail="Selected PointBlank Look preset not found.")
+
+        prompt_text = look.transformation_prompt or f"Professional medical doctor portrait of {scenario.doctor.doctor_name}"
+        if look.preview_image_url and look.preview_image_url.startswith("http"):
+            ref_images.append(look.preview_image_url)
+
+        scenario.look_id = look.id
+        scenario.name = f"{scenario.doctor.doctor_name} — {look.name}"
+        scenario.background_type = look.background_type or "clinic"
+        scenario.background_value = look.background_value or "#FAFAFA"
+        scenario.framing = look.camera_framing or "medium"
+        scenario.aspect_ratio = look.aspect_ratio or "16:9"
+    else:
+        raise HTTPException(status_code=400, detail="Please select a Look before generating the avatar.")
+
     scenario.creation_status = "LOOK_SUBMITTED"
     db.commit()
 

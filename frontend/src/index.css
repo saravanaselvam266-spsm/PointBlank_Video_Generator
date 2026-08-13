@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+:root {
+  --pb-background: #FAFAFA;
+  --pb-surface: #FFFFFF;
+  --pb-surface-secondary: #F5F5F5;
+  --pb-text-primary: #1F2937;
+  --pb-text-secondary: #6B7280;
+  --pb-border: #E5E7EB;
+  --pb-brand: #005570;
+  --pb-brand-hover: #004055;
+  --pb-brand-accent: #007799;
+  --pb-brand-tint: #E6F3F7;
+  --pb-focus: #0284C7;
+  --pb-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --pb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+}
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--pb-background);
+    color: var(--pb-text-primary);
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', 'Inter', sans-serif;
+    color: var(--pb-text-primary);
+  }
+}
+
+/* Custom Light Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #005570;
+}
+
+/* Card Utility */
+.pb-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pb-card-hover:hover {
+  border-color: #007799;
+  box-shadow: 0 4px 12px rgba(0, 85, 112, 0.08);
+}

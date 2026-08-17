@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { heyGenApi, voiceApi } from '../../api/client';
 import { Volume2, Play, Pause, CheckCircle2, Search, Loader2, AlertCircle, Save, BookmarkCheck } from 'lucide-react';
+import { StepHeader } from '../ui/StepHeader';
+import { WizardFooter } from '../ui/WizardFooter';
 
 export const VoiceSelector = () => {
   const { currentDoctor, selectedVoiceRecord, setSelectedVoiceRecord, selectedVoice, setSelectedVoice, setActiveStep } = useApp();
@@ -41,7 +43,7 @@ export const VoiceSelector = () => {
         setSavedVoices(savedList);
       }
 
-      // 2. Fetch Live HeyGen Voices Library
+      // 2. Fetch Live Voice Library
       const resHg = await heyGenApi.getVoices();
       const hgList = Array.isArray(resHg.data) ? resHg.data : resHg.data?.voices || [];
       setHeygenVoices(hgList);
@@ -59,7 +61,7 @@ export const VoiceSelector = () => {
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Failed to fetch Voices library');
+      setError(err.message || 'Failed to load the voice library');
     } finally {
       setLoading(false);
     }
@@ -86,7 +88,7 @@ export const VoiceSelector = () => {
 
   const handleSaveVoiceForDoctor = async (v) => {
     if (!currentDoctor) {
-      setError('Please select a Doctor Profile first.');
+      setError('Please select a doctor profile first.');
       return;
     }
 
@@ -114,7 +116,7 @@ export const VoiceSelector = () => {
       setActiveTab('saved');
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Failed to save Voice for Doctor');
+      setError(err.message || 'Failed to save this voice for the doctor');
     } finally {
       setSavingVoice(false);
     }
@@ -128,62 +130,58 @@ export const VoiceSelector = () => {
   });
 
   return (
-    <div className="max-w-5xl mx-auto p-6 text-left font-sans select-none space-y-6">
-      {/* Header */}
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#E6F3F7] text-[#005570] border border-[#007799]/20 mb-3">
-          <Volume2 className="w-7 h-7" />
-        </div>
-        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Select Doctor Voice</h2>
-        <p className="text-slate-500 text-sm mt-1 max-w-lg mx-auto">
-          Choose a saved voice for {currentDoctor?.doctor_name || 'the Doctor'} or pick from our AI voice library.
-        </p>
-      </div>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <StepHeader
+        step={3}
+        icon={Volume2}
+        title="Choose a voice"
+        description={`Pick a saved voice for ${currentDoctor?.doctor_name || 'this doctor'}, or browse the AI voice library.`}
+      />
 
       {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center space-x-3">
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center gap-3">
           <AlertCircle className="w-5 h-5 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Info Notice for Voice Cloning */}
-      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-slate-600 text-xs flex items-center justify-between">
-        <span>Custom voice cloning is not currently available for this account.</span>
-        <span className="px-2.5 py-1 rounded bg-white text-slate-700 border border-slate-200 font-medium shadow-xs">
-          Standard AI Voice Library Active
+      <div className="p-3.5 rounded-xl bg-[#F5F7F8] border border-[#E5E7EB] text-[#6B7280] text-xs flex flex-wrap items-center justify-between gap-2">
+        <span>Custom voice cloning isn't available on this account yet.</span>
+        <span className="px-2.5 py-1 rounded bg-white text-[#374151] border border-[#E5E7EB] font-medium">
+          Standard voice library active
         </span>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-        <div className="flex space-x-2 bg-slate-100 p-1.5 rounded-2xl">
+      <div className="flex flex-wrap justify-between items-center gap-3 border-b border-[#E5E7EB] pb-4">
+        <div className="flex space-x-1.5 bg-[#F5F7F8] p-1.5 rounded-2xl">
           {savedVoices.length > 0 && (
             <button
               type="button"
               onClick={() => setActiveTab('saved')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'saved' ? 'bg-[#005570] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'saved' ? 'bg-[#005570] text-white shadow-xs' : 'text-[#6B7280] hover:text-[#1F2937]'
               }`}
             >
               <BookmarkCheck className="w-4 h-4" />
-              <span>Saved Doctor Voices ({savedVoices.length})</span>
+              <span>Saved voices ({savedVoices.length})</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => setActiveTab('heygen')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
-              activeTab === 'heygen' ? 'bg-[#005570] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'heygen' ? 'bg-[#005570] text-white shadow-xs' : 'text-[#6B7280] hover:text-[#1F2937]'
             }`}
           >
             <Volume2 className="w-4 h-4" />
-            <span>AI Voice Library ({heygenVoices.length})</span>
+            <span>Voice library ({heygenVoices.length})</span>
           </button>
         </div>
 
         {selectedVoice && (
-          <div className="text-xs text-slate-600 flex items-center space-x-2">
+          <div className="text-xs text-[#6B7280] flex items-center gap-2">
             <span>Selected:</span>
             <strong className="text-[#005570] font-bold">{selectedVoice.name || selectedVoice.voice_id}</strong>
           </div>
@@ -194,8 +192,8 @@ export const VoiceSelector = () => {
       {activeTab === 'saved' && (
         <div className="space-y-4">
           {savedVoices.length === 0 ? (
-            <div className="p-8 text-center bg-white border border-slate-200 rounded-2xl text-slate-500">
-              <p className="text-sm">No saved voices for this doctor yet. Browse the AI Voice Library tab below to save one.</p>
+            <div className="p-8 text-center bg-white border border-[#E5E7EB] rounded-2xl text-[#6B7280]">
+              <p className="text-sm">No saved voices for this doctor yet. Browse the voice library tab to save one.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -203,46 +201,45 @@ export const VoiceSelector = () => {
                 const isSel = selectedVoiceRecord?.id === v.id || selectedVoice?.voice_id === v.heygen_voice_id;
                 const isPlay = playingVoiceId === v.id;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={v.id}
                     onClick={() => {
                       setSelectedVoiceRecord(v);
                       setSelectedVoice({ voice_id: v.heygen_voice_id, name: v.name });
                     }}
-                    className={`cursor-pointer p-4 rounded-2xl border transition-all text-left ${
+                    className={`text-left p-4 rounded-2xl border transition-all ${
                       isSel
-                        ? 'border-[#005570] bg-[#E6F3F7] shadow-md shadow-[#005570]/10'
-                        : 'border-slate-200 bg-white hover:border-[#007799]/50 hover:shadow-xs'
+                        ? 'border-[#005570] bg-[#E6F3F7] shadow-sm'
+                        : 'border-[#E5E7EB] bg-white hover:border-[#007799]/50'
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#005570] text-white mb-1.5">
-                          {v.voice_id}
-                        </div>
-                        <h4 className="font-bold text-slate-900 text-sm">{v.name}</h4>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{v.language} • {v.gender || 'neutral'}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-[#1F2937] text-sm truncate">{v.name}</h4>
+                        <p className="text-[11px] text-[#6B7280] mt-0.5">{v.language} • {v.gender || 'neutral'}</p>
                       </div>
 
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         {v.preview_url && (
-                          <button
-                            type="button"
+                          <span
+                            role="button"
+                            tabIndex={0}
                             onClick={(e) => {
                               e.stopPropagation();
                               handlePlayAudio(v.preview_url, v.id);
                             }}
-                            className={`p-2 rounded-xl transition-all ${
-                              isPlay ? 'bg-[#005570] text-white' : 'bg-slate-100 text-[#005570] hover:bg-[#E6F3F7]'
+                            className={`p-2 rounded-xl transition-all cursor-pointer ${
+                              isPlay ? 'bg-[#005570] text-white' : 'bg-[#F5F7F8] text-[#005570] hover:bg-[#E6F3F7]'
                             }`}
                           >
                             {isPlay ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                          </button>
+                          </span>
                         )}
                         {isSel && <CheckCircle2 className="w-5 h-5 text-[#005570]" />}
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -250,28 +247,28 @@ export const VoiceSelector = () => {
         </div>
       )}
 
-      {/* Tab 2: Live HeyGen AI Voice Library */}
+      {/* Tab 2: Live Voice Library */}
       {activeTab === 'heygen' && (
         <div className="space-y-4">
           {/* Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3.5 top-3.5 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search voice name..."
+                placeholder="Search voice name…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 text-xs focus:outline-hidden focus:border-[#007799]"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#E5E7EB] text-[#1F2937] text-sm focus:outline-hidden focus:border-[#007799]"
               />
             </div>
 
             <select
               value={genderFilter}
               onChange={(e) => setGenderFilter(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs focus:outline-hidden focus:border-[#007799]"
+              className="w-full px-4 py-2.5 rounded-xl bg-white border border-[#E5E7EB] text-[#374151] text-sm focus:outline-hidden focus:border-[#007799]"
             >
-              <option value="all">All Genders</option>
+              <option value="all">All genders</option>
               <option value="female">Female</option>
               <option value="male">Male</option>
             </select>
@@ -279,9 +276,9 @@ export const VoiceSelector = () => {
             <select
               value={languageFilter}
               onChange={(e) => setLanguageFilter(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs focus:outline-hidden focus:border-[#007799]"
+              className="w-full px-4 py-2.5 rounded-xl bg-white border border-[#E5E7EB] text-[#374151] text-sm focus:outline-hidden focus:border-[#007799]"
             >
-              <option value="all">All Languages</option>
+              <option value="all">All languages</option>
               <option value="english">English</option>
               <option value="spanish">Spanish</option>
               <option value="french">French</option>
@@ -291,10 +288,10 @@ export const VoiceSelector = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Loader2 className="w-8 h-8 text-[#005570] animate-spin mb-3" />
-              <p className="text-slate-500 text-sm">Loading voices...</p>
+              <p className="text-[#6B7280] text-sm">Loading voices…</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto pr-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto pr-1">
               {filteredHeyGenVoices.map((v) => {
                 const isSelected = selectedVoice?.voice_id === v.voice_id;
                 const isPlaying = playingVoiceId === v.voice_id;
@@ -302,24 +299,24 @@ export const VoiceSelector = () => {
                   <div
                     key={v.voice_id}
                     onClick={() => setSelectedVoice(v)}
-                    className={`cursor-pointer p-4 rounded-2xl border transition-all text-left ${
+                    className={`cursor-pointer p-4 rounded-2xl border transition-all ${
                       isSelected
-                        ? 'border-[#005570] bg-[#E6F3F7] shadow-md shadow-[#005570]/10'
-                        : 'border-slate-200 bg-white hover:border-[#007799]/50 hover:shadow-xs'
+                        ? 'border-[#005570] bg-[#E6F3F7] shadow-sm'
+                        : 'border-[#E5E7EB] bg-white hover:border-[#007799]/50'
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{v.name || v.voice_id}</h4>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-medium border border-slate-200">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-[#1F2937] text-sm truncate">{v.name || v.voice_id}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-[#F5F7F8] text-[#374151] font-medium border border-[#E5E7EB]">
                             {v.gender || 'neutral'}
                           </span>
-                          <span className="text-[10px] text-slate-500">{v.language || 'English'}</span>
+                          <span className="text-[10px] text-[#6B7280]">{v.language || 'English'}</span>
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         {v.preview_audio && (
                           <button
                             type="button"
@@ -328,7 +325,7 @@ export const VoiceSelector = () => {
                               handlePlayAudio(v.preview_audio, v.voice_id);
                             }}
                             className={`p-2 rounded-xl transition-all ${
-                              isPlaying ? 'bg-[#005570] text-white' : 'bg-slate-100 text-[#005570] hover:bg-[#E6F3F7]'
+                              isPlaying ? 'bg-[#005570] text-white' : 'bg-[#F5F7F8] text-[#005570] hover:bg-[#E6F3F7]'
                             }`}
                           >
                             {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
@@ -338,8 +335,8 @@ export const VoiceSelector = () => {
                       </div>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[10px] font-mono text-slate-400 truncate max-w-[120px]">{v.voice_id}</span>
+                    <div className="mt-3 pt-3 border-t border-[#F5F7F8] flex items-center justify-between">
+                      <span className="text-[10px] text-[#9CA3AF] truncate max-w-[120px]">{v.language || 'English'} voice</span>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -347,10 +344,10 @@ export const VoiceSelector = () => {
                           handleSaveVoiceForDoctor(v);
                         }}
                         disabled={savingVoice}
-                        className="px-2.5 py-1 rounded-lg bg-[#005570] hover:bg-[#004055] text-white text-[10px] font-bold flex items-center space-x-1"
+                        className="px-2.5 py-1 rounded-lg bg-[#005570] hover:bg-[#004055] text-white text-[10px] font-bold flex items-center gap-1 disabled:opacity-60"
                       >
                         <Save className="w-3 h-3" />
-                        <span>Save Voice</span>
+                        <span>Save voice</span>
                       </button>
                     </div>
                   </div>
@@ -361,24 +358,13 @@ export const VoiceSelector = () => {
         </div>
       )}
 
-      {/* Action Footer */}
-      {selectedVoice && (
-        <div className="mt-8 flex justify-between items-center pt-4 border-t border-slate-100">
-          <button
-            onClick={() => setActiveStep(2)}
-            className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50"
-          >
-            ← Back to Avatar Scenario
-          </button>
-
-          <button
-            onClick={() => setActiveStep(4)}
-            className="px-8 py-3.5 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-bold text-sm transition-all shadow-lg shadow-[#005570]/20"
-          >
-            Continue to Healthcare Script →
-          </button>
-        </div>
-      )}
+      <WizardFooter
+        onBack={() => setActiveStep(2)}
+        backLabel="Back to Avatar"
+        onNext={() => setActiveStep(4)}
+        nextLabel="Continue to Script"
+        nextDisabled={!selectedVoice}
+      />
     </div>
   );
 };

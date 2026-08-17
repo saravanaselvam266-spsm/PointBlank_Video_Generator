@@ -3,16 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { avatarScenarioApi } from '../../api/client';
 import {
-  UserCheck,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  ArrowRight,
-  ArrowLeft,
-  Sparkles,
   PlusCircle,
-  ImageIcon
+  ImageIcon,
+  UserRound
 } from 'lucide-react';
+import { StepHeader } from '../ui/StepHeader';
+import { EmptyState } from '../ui/EmptyState';
+import { WizardFooter } from '../ui/WizardFooter';
 
 export const AvatarScenarioEditor = () => {
   const navigate = useNavigate();
@@ -43,7 +43,7 @@ export const AvatarScenarioEditor = () => {
     try {
       const res = await avatarScenarioApi.list(doctorId);
       const allScenarios = Array.isArray(res.data) ? res.data : [];
-      
+
       // Strict filtering: ONLY show READY avatars for the selected doctor
       const readyAvatars = allScenarios.filter(
         (sc) => sc.creation_status === 'READY' && (!sc.doctor_id || sc.doctor_id === doctorId)
@@ -58,7 +58,7 @@ export const AvatarScenarioEditor = () => {
       }
     } catch (err) {
       console.error('Failed to load doctor avatars:', err);
-      setError(err.message || 'Failed to load avatars for selected doctor.');
+      setError(err.message || 'Failed to load avatars for the selected doctor.');
     } finally {
       setLoading(false);
     }
@@ -77,59 +77,57 @@ export const AvatarScenarioEditor = () => {
 
   if (!currentDoctor) {
     return (
-      <div className="max-w-2xl mx-auto p-12 bg-white border border-slate-200 rounded-3xl text-center space-y-4">
-        <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
-        <h3 className="text-xl font-bold text-slate-900">No Doctor Profile Selected</h3>
-        <p className="text-xs text-slate-500">Please select a doctor profile first to view their available avatars.</p>
-        <button
-          onClick={() => setActiveStep(1)}
-          className="px-6 py-2.5 bg-[#005570] text-white font-bold text-xs rounded-xl hover:bg-[#004055]"
-        >
-          ← Go to Step 1: Select Doctor
-        </button>
-      </div>
+      <EmptyState
+        icon={AlertCircle}
+        tone="warning"
+        title="No doctor profile selected"
+        description="Select a doctor profile first to see their available avatars."
+        className="max-w-lg mx-auto"
+        action={
+          <button
+            onClick={() => setActiveStep(1)}
+            className="px-6 py-2.5 bg-[#005570] text-white font-bold text-sm rounded-xl hover:bg-[#004055]"
+          >
+            Go to Step 1: Choose Doctor
+          </button>
+        }
+      />
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 text-left font-sans select-none pb-12">
+    <div className="max-w-5xl mx-auto space-y-6">
+      <StepHeader
+        step={2}
+        icon={UserRound}
+        title="Choose an avatar"
+        description={`Pick the on-screen look that will present the video for ${currentDoctor.doctor_name}.`}
+      />
+
       {/* Selected Doctor Summary Card */}
-      <div className="p-4 rounded-2xl bg-[#E6F3F7] border border-[#007799]/20 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-[#005570] text-white flex items-center justify-center font-bold text-sm">
+      <div className="p-4 rounded-2xl bg-[#E6F3F7] border border-[#007799]/20 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-[#005570] text-white flex items-center justify-center font-bold text-sm shrink-0">
             {currentDoctor.doctor_name.charAt(0)}
           </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-[#005570] uppercase tracking-wider">Active Doctor</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#005570] uppercase tracking-wider">Active doctor</span>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white text-[#005570] border border-[#007799]/20">
                 {currentDoctor.doctor_id}
               </span>
             </div>
-            <h3 className="text-sm font-extrabold text-slate-900">{currentDoctor.doctor_name}</h3>
+            <h3 className="text-sm font-extrabold text-[#1F2937] truncate">{currentDoctor.doctor_name}</h3>
           </div>
         </div>
 
-        <button
-          onClick={() => setActiveStep(1)}
-          className="text-xs font-bold text-[#005570] hover:underline"
-        >
-          Change Doctor
+        <button onClick={() => setActiveStep(1)} className="text-xs font-bold text-[#005570] hover:underline shrink-0">
+          Change doctor
         </button>
       </div>
 
-      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-        <div>
-          <span className="text-xs font-bold text-[#005570] uppercase tracking-wider">Step 2 of 7</span>
-          <h2 className="text-xl font-bold text-slate-900">Select Doctor Avatar</h2>
-        </div>
-        <span className="text-xs text-slate-500">
-          Showing READY avatars for <strong className="text-slate-900">{currentDoctor.doctor_name}</strong>
-        </span>
-      </div>
-
       {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -137,111 +135,93 @@ export const AvatarScenarioEditor = () => {
 
       {/* Avatars Grid */}
       {loading ? (
-        <div className="py-16 text-center text-slate-500 flex flex-col items-center space-y-3">
+        <div className="py-16 text-center text-[#6B7280] flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-[#005570]" />
-          <p className="text-xs font-medium">Loading avatars for {currentDoctor.doctor_name}...</p>
+          <p className="text-sm font-medium">Loading avatars for {currentDoctor.doctor_name}…</p>
         </div>
       ) : avatars.length === 0 ? (
-        /* Empty State */
-        <div className="p-12 bg-white border border-slate-200 rounded-3xl text-center space-y-5 max-w-md mx-auto my-6">
-          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
-            <ImageIcon className="w-7 h-7" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">No ready avatars are available for this doctor yet</h3>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Create a new AI avatar for {currentDoctor.doctor_name} using professional look generation.
-            </p>
-          </div>
-          <button
-            onClick={() => navigate('/app/create-avatar')}
-            className="px-6 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-extrabold text-xs shadow-md shadow-[#005570]/20 flex items-center justify-center space-x-2 mx-auto"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>Create Avatar →</span>
-          </button>
-        </div>
+        <EmptyState
+          icon={ImageIcon}
+          tone="warning"
+          title="No avatars ready for this doctor yet"
+          description={`Create a new AI avatar for ${currentDoctor.doctor_name} to use in this video.`}
+          className="max-w-md mx-auto"
+          action={
+            <button
+              onClick={() => navigate('/app/create-avatar')}
+              className="px-6 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-bold text-sm shadow-md shadow-[#005570]/20 inline-flex items-center gap-2"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Create an Avatar</span>
+            </button>
+          }
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
           {avatars.map((sc) => {
             const isSelected = selectedScenario?.id === sc.id;
             const previewUrl = sc.heygen_preview_image_url || sc.photo_url || sc.original_photo_url;
             return (
-              <div
+              <button
+                type="button"
                 key={sc.id}
                 onClick={() => handleSelectAvatarScenario(sc)}
-                className={`cursor-pointer rounded-2xl border p-5 bg-white transition-all flex flex-col justify-between hover:border-[#007799] ${
-                  isSelected
-                    ? 'border-[#005570] ring-2 ring-[#005570]/30 shadow-md bg-gradient-to-b from-teal-50/20 to-white'
-                    : 'border-slate-200'
+                className={`text-left rounded-2xl border p-4 bg-white transition-all flex flex-col justify-between hover:border-[#007799] ${
+                  isSelected ? 'border-[#005570] ring-2 ring-[#005570]/25 shadow-sm' : 'border-[#E5E7EB]'
                 }`}
               >
-                <div className="space-y-4">
-                  {/* Real HeyGen Preview Image */}
-                  <div className="aspect-3/4 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative">
+                <div className="space-y-3">
+                  <div className="aspect-3/4 bg-[#F5F7F8] rounded-xl overflow-hidden border border-[#E5E7EB] relative">
                     {previewUrl ? (
                       <img
                         src={previewUrl}
                         alt={sc.name}
+                        loading="lazy"
                         className="w-full h-full object-contain"
+                        onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                       />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-400">
-                        <ImageIcon className="w-8 h-8" />
+                    ) : null}
+                    <div
+                      className="items-center justify-center h-full text-[#9CA3AF]"
+                      style={{ display: previewUrl ? 'none' : 'flex' }}
+                    >
+                      <ImageIcon className="w-8 h-8" />
+                    </div>
+                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Ready
+                    </span>
+                    {isSelected && (
+                      <div className="absolute inset-0 bg-[#005570]/5 flex items-start justify-end p-2">
+                        <CheckCircle2 className="w-6 h-6 text-[#005570] bg-white rounded-full" />
                       </div>
                     )}
-                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      READY
-                    </span>
                   </div>
 
                   <div>
-                    <h4 className="font-extrabold text-slate-900 text-sm truncate">{sc.name}</h4>
-                    <p className="text-[11px] text-slate-500 font-mono mt-0.5">{sc.avatar_scenario_id}</p>
-                  </div>
-
-                  <div className="pt-2 text-[11px] text-slate-600 space-y-1 border-t border-slate-100">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Doctor:</span>
-                      <strong className="text-slate-900 truncate max-w-[150px]">{currentDoctor.doctor_name}</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Doctor ID:</span>
-                      <strong className="text-[#005570] font-mono">{currentDoctor.doctor_id}</strong>
-                    </div>
+                    <h4 className="font-bold text-[#1F2937] text-sm truncate">{sc.name}</h4>
+                    <p className="text-[11px] text-[#6B7280] font-mono mt-0.5 truncate">{sc.avatar_scenario_id}</p>
                   </div>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className={`text-xs font-extrabold ${isSelected ? 'text-[#005570]' : 'text-slate-500'}`}>
-                    {isSelected ? '✓ Selected Avatar' : 'Select Avatar'}
+                <div className="mt-4 pt-3 border-t border-[#F5F7F8] flex items-center justify-between">
+                  <span className={`text-xs font-bold ${isSelected ? 'text-[#005570]' : 'text-[#6B7280]'}`}>
+                    {isSelected ? 'Selected' : 'Select this avatar'}
                   </span>
-                  <CheckCircle2 className={`w-4 h-4 ${isSelected ? 'text-[#005570]' : 'text-slate-300'}`} />
+                  <CheckCircle2 className={`w-4 h-4 ${isSelected ? 'text-[#005570]' : 'text-[#D1D5DB]'}`} />
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
       )}
 
-      {/* Bottom Step Navigation Row */}
-      <div className="flex justify-between items-center pt-6 border-t border-slate-200">
-        <button
-          onClick={() => setActiveStep(1)}
-          className="flex items-center space-x-1.5 px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Doctor Selection</span>
-        </button>
-
-        <button
-          onClick={() => setActiveStep(3)}
-          disabled={!selectedScenario}
-          className="px-8 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-extrabold text-xs shadow-md shadow-[#005570]/20 flex items-center space-x-2 disabled:opacity-40"
-        >
-          <span>Proceed to Voice Selection →</span>
-        </button>
-      </div>
+      <WizardFooter
+        onBack={() => setActiveStep(1)}
+        backLabel="Back to Doctor"
+        onNext={() => setActiveStep(3)}
+        nextLabel="Continue to Voice"
+        nextDisabled={!selectedScenario}
+      />
     </div>
   );
 };

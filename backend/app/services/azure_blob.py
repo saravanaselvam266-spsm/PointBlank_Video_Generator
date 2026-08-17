@@ -137,6 +137,9 @@ class AzureBlobService:
         (potentially large) file and without ever exposing AccountKey to the
         frontend. AccountKey is used only server-side to sign the token; the
         signature in the returned URL cannot be reversed back into the key.
+
+        Intended for explicit "download this file" actions (final video,
+        QR image download) — short expiry since the link is used immediately.
         """
         sas_token = generate_blob_sas(
             account_name=settings.AZURE_STORAGE_ACCOUNT_NAME,
@@ -147,6 +150,16 @@ class AzureBlobService:
             expiry=datetime.now(timezone.utc) + timedelta(minutes=expiry_minutes)
         )
         return f"{self.get_blob_client(blob_name).url}?{sas_token}"
+
+    def generate_read_sas_url(self, blob_name: str, expiry_minutes: int = 60) -> str:
+        """
+        Generates a short-lived, read-only SAS URL for inline viewing (avatar
+        grid images, voice preview audio, video playback, embedded QR images) —
+        same read-only signature as generate_download_sas_url, just a longer
+        default expiry suited to a page staying open and re-rendering the same
+        list without hammering this endpoint. Never grants write/delete access.
+        """
+        return self.generate_download_sas_url(blob_name, expiry_minutes=expiry_minutes)
 
     def check_connection(self) -> Dict[str, Any]:
         """

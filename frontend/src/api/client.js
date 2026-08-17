@@ -159,7 +159,8 @@ export const videoApi = {
   list: (doctorId) => apiClient.get('/videos', { params: { doctor_id: doctorId } }),
   get: (id) => apiClient.get(`/videos/${id}`),
   getDownloadUrl: (id) => apiClient.get(`/videos/${id}/download`),
-  retryStorage: (id) => apiClient.post(`/videos/${id}/storage/retry`)
+  retryStorage: (id) => apiClient.post(`/videos/${id}/storage/retry`),
+  getShareInfo: (id) => apiClient.get(`/videos/${id}/share`)
 };
 
 export const publicApi = {

@@ -12,6 +12,8 @@ from app.models import User, DoctorProfile, AvatarScenario, AvatarLook, get_next
 from app.schemas import AvatarScenarioCreate, AvatarScenarioUpdate, AvatarScenarioResponse
 from app.dependencies.auth import get_current_user
 from app.services.heygen_service import heygen_service
+from app.services.media_utils import sniff_image_content_type, extension_for_content_type
+from app.services.media_resolve import mirror_avatar_preview_to_azure, mirror_original_photo_to_azure, resolve_avatar_photo_url
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +25,10 @@ def _detect_image_content_type(file_bytes: bytes) -> Optional[str]:
     Determines the REAL image MIME type from the actual file bytes (magic-number
     signature), not the filename extension or a client-declared header. HeyGen's
     asset upload rejects requests where the declared Content-Type disagrees with
-    the actual bytes, so this must be authoritative before every upload.
+    the actual bytes, so this must be authoritative before every upload. Thin
+    wrapper over the shared, provider-agnostic sniffer in media_utils.
     """
-    if file_bytes.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
-        return "image/webp"
-    return None
+    return sniff_image_content_type(file_bytes)
 
 
 def _is_raw_upload_content_type_mismatch(err_msg: str) -> bool:
@@ -195,6 +192,11 @@ async def upload_doctor_photo(
     db.add(new_scenario)
     db.commit()
     db.refresh(new_scenario)
+
+    # Best-effort mirror of the doctor's original photo to Azure Blob Storage.
+    # Local disk remains authoritative for create-base-avatar's read-back step
+    # regardless of outcome here — this only affects the Azure Blob requirement.
+    mirror_original_photo_to_azure(new_scenario, file_bytes, real_content_type, db)
 
     return {
         "scenario_id": new_scenario.id,
@@ -449,6 +451,12 @@ async def generate_look_for_avatar(
 
         logger.info(f"HeyGen Look Generation Submitted for {scenario.avatar_scenario_id}: generated_look_id={generated_look_id}, status={status_str}")
 
+        # Look already completed synchronously — mirror the final avatar image
+        # to Azure Blob Storage right away rather than waiting for the next
+        # /status poll. Best-effort: never blocks returning the response.
+        if scenario.creation_status == "READY" and scenario.heygen_preview_image_url:
+            await mirror_avatar_preview_to_azure(scenario, scenario.heygen_preview_image_url, db)
+
         return {
             "success": True,
             "scenario_id": scenario.id,
@@ -576,17 +584,23 @@ async def check_avatar_look_status(
                 db.commit()
                 db.refresh(scenario)
 
+                # Mirror the final avatar image to Azure Blob Storage now that
+                # the look is confirmed ready. Idempotent + best-effort.
+                if scenario.heygen_preview_image_url:
+                    await mirror_avatar_preview_to_azure(scenario, scenario.heygen_preview_image_url, db)
+
                 res_obj = AvatarScenarioResponse.model_validate(scenario)
                 if scenario.doctor:
                     res_obj.doctor_name = scenario.doctor.doctor_name
                 if scenario.look:
                     res_obj.look_name = scenario.look.name
+                res_obj.photo_url = resolve_avatar_photo_url(scenario)
 
                 return {
                     "status": "completed",
                     "scenario_id": scenario.id,
                     "heygen_look_id": scenario.heygen_look_id,
-                    "preview_image_url": scenario.heygen_preview_image_url,
+                    "preview_image_url": res_obj.photo_url,
                     "scenario": res_obj
                 }
             elif look_st == "failed":
@@ -617,17 +631,24 @@ async def check_avatar_look_status(
 
     # D. Final Ready State
     if scenario.creation_status == "READY":
+        # Backfill for scenarios that reached READY before Azure mirroring
+        # existed, or whose mirror previously failed — retried on every poll
+        # of an already-ready scenario until it succeeds, idempotent once uploaded.
+        if scenario.avatar_storage_status != "uploaded" and scenario.heygen_preview_image_url:
+            await mirror_avatar_preview_to_azure(scenario, scenario.heygen_preview_image_url, db)
+
         res_obj = AvatarScenarioResponse.model_validate(scenario)
         if scenario.doctor:
             res_obj.doctor_name = scenario.doctor.doctor_name
         if scenario.look:
             res_obj.look_name = scenario.look.name
+        res_obj.photo_url = resolve_avatar_photo_url(scenario)
 
         return {
             "status": "completed",
             "scenario_id": scenario.id,
             "heygen_look_id": scenario.heygen_look_id,
-            "preview_image_url": scenario.heygen_preview_image_url or scenario.photo_url,
+            "preview_image_url": res_obj.photo_url,
             "scenario": res_obj
         }
 
@@ -666,6 +687,7 @@ def list_avatar_scenarios(
             sc_res.doctor_name = sc.doctor.doctor_name
         if sc.look:
             sc_res.look_name = sc.look.name
+        sc_res.photo_url = resolve_avatar_photo_url(sc)
         res_list.append(sc_res)
 
     return res_list
@@ -694,6 +716,7 @@ def get_avatar_scenario_details(
         res.doctor_name = sc.doctor.doctor_name
     if sc.look:
         res.look_name = sc.look.name
+    res.photo_url = resolve_avatar_photo_url(sc)
     return res
 
 

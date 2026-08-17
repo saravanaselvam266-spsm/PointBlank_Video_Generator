@@ -178,6 +178,10 @@ class AvatarScenarioResponse(BaseModel):
     updated_at: datetime
     doctor_name: Optional[str] = None
     look_name: Optional[str] = None
+    azure_blob_name: Optional[str] = None
+    azure_preview_blob_name: Optional[str] = None
+    original_photo_azure_blob_name: Optional[str] = None
+    avatar_storage_status: str = "pending"
 
 
     class Config:
@@ -213,6 +217,8 @@ class VoiceResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     doctor_name: Optional[str] = None
+    azure_blob_name: Optional[str] = None
+    voice_storage_status: str = "pending"
 
     class Config:
         from_attributes = True
@@ -281,3 +287,12 @@ class PublicShareResponse(BaseModel):
     doctor_name: Optional[str] = None
     specialization: Optional[str] = None
     created_at: Optional[datetime] = None
+
+
+class VideoShareResponse(BaseModel):
+    """Authenticated 'get or create my share link' response — used by the
+    video owner's own ResultView, distinct from the public /watch/{token} page."""
+    qr_id: str
+    public_token: str
+    public_url: str
+    qr_image: Optional[str] = None

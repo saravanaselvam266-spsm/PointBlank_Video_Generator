@@ -171,6 +171,17 @@ class AvatarScenario(Base):
     creation_status = Column(String(50), default="DRAFT", nullable=False, index=True) # 'DRAFT', 'BASE_CREATING', 'BASE_READY', 'LOOK_SUBMITTED', 'LOOK_PROCESSING', 'READY', 'FAILED', 'DELETED'
     creation_error = Column(Text, nullable=True)
 
+    # Azure Blob mirror of the FINAL generated avatar image (the actual asset
+    # shown in the Avatar Library), e.g. avatars/PB-DOC-000001/PB-AVT-000001/final.png.
+    # azure_preview_blob_name currently points at the same blob — HeyGen returns
+    # one avatar image per look, there is no separate higher-res "final" render.
+    azure_blob_name = Column(Text, nullable=True)
+    azure_preview_blob_name = Column(Text, nullable=True)
+    # Azure Blob mirror of the doctor's original uploaded photo, e.g.
+    # doctors/PB-DOC-000001/photos/PB-AVT-000001.jpg
+    original_photo_azure_blob_name = Column(Text, nullable=True)
+    avatar_storage_status = Column(String(50), default="pending", nullable=False, index=True) # pending, uploading, uploaded, failed
+
     metadata_json = Column(JSONB, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False, index=True)
     
@@ -199,7 +210,13 @@ class Voice(Base):
     preview_url = Column(String(500), nullable=True)
     source_metadata_json = Column(JSONB, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False, index=True)
-    
+
+    # Azure Blob mirror of the voice preview audio, e.g.
+    # voices/PB-DOC-000001/PB-VCE-000001/preview.mp3. Storage-only — no
+    # voice-cloning provider integration exists in this codebase today.
+    azure_blob_name = Column(Text, nullable=True)
+    voice_storage_status = Column(String(50), default="pending", nullable=False) # pending, uploading, uploaded, failed
+
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -255,8 +272,9 @@ class PublicVideoShare(Base):
     
     public_token = Column(String(64), unique=True, nullable=False, index=True) # Secure 256-bit Token
     public_url = Column(Text, nullable=False) # http://localhost:5250/watch/<public_token>
-    qr_image = Column(Text, nullable=False) # Base64 Data URI
-    
+    qr_image = Column(Text, nullable=False) # Base64 Data URI fallback (small, always populated)
+    qr_blob_name = Column(Text, nullable=True) # Azure Blob path, e.g. qr/PB-DOC-000001/PB-VID-000001.png — primary serving path once uploaded
+
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     video = relationship("Video", back_populates="shares")

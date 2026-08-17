@@ -175,10 +175,18 @@ export const Avatars = () => {
 
                     <div className="aspect-3/4 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-100">
                       {sc.photo_url ? (
-                        <img src={sc.photo_url} alt={sc.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <UserRound className="w-10 h-10 text-slate-300" />
-                      )}
+                        <img
+                          src={sc.photo_url}
+                          alt={sc.name}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                        />
+                      ) : null}
+                      <UserRound
+                        className="w-10 h-10 text-slate-300"
+                        style={{ display: sc.photo_url ? 'none' : 'flex' }}
+                      />
                     </div>
 
                     <div>

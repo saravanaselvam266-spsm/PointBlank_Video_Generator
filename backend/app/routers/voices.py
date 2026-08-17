@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models import User, DoctorProfile, Voice, get_next_pb_id
 from app.schemas import VoiceCreate, VoiceResponse
 from app.dependencies.auth import get_current_user
+from app.services.media_resolve import mirror_voice_preview_to_azure, resolve_voice_preview_url
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/api/v1/voices", tags=["Saved Voices"])
 
 
 @router.post("", response_model=VoiceResponse, status_code=status.HTTP_201_CREATED)
-def create_voice(
+async def create_voice(
     req: VoiceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -55,8 +56,14 @@ def create_voice(
 
     logger.info(f"Saved Voice Created: {pb_vce_id} ('{new_voice.name}') for Doctor={doctor.doctor_name}")
 
+    # Best-effort mirror of the provider-hosted preview sample to Azure Blob
+    # Storage. Storage-only — never blocks saving the voice if it fails.
+    if new_voice.preview_url:
+        await mirror_voice_preview_to_azure(new_voice, new_voice.preview_url, db)
+
     res = VoiceResponse.model_validate(new_voice)
     res.doctor_name = doctor.doctor_name
+    res.preview_url = resolve_voice_preview_url(new_voice)
     return res
 
 
@@ -85,6 +92,7 @@ def list_voices(
         v_res = VoiceResponse.model_validate(v)
         if v.doctor:
             v_res.doctor_name = v.doctor.doctor_name
+        v_res.preview_url = resolve_voice_preview_url(v)
         res_list.append(v_res)
 
     return res_list
@@ -107,6 +115,7 @@ def get_voice_details(
     res = VoiceResponse.model_validate(v)
     if v.doctor:
         res.doctor_name = v.doctor.doctor_name
+    res.preview_url = resolve_voice_preview_url(v)
     return res
 
 

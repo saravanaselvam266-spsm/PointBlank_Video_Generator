@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
@@ -31,6 +32,100 @@ def _detect_image_content_type(file_bytes: bytes) -> Optional[str]:
     if file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
         return "image/webp"
     return None
+
+
+def _is_raw_upload_content_type_mismatch(err_msg: str) -> bool:
+    """
+    Recognizes HeyGen's literal wording for a raw-bytes Content-Type mismatch
+    (e.g. "Content type not match image/jpeg != image/png").
+
+    Scope note: only call this where WE ourselves upload the user's raw image
+    bytes (create_base_avatar's asset-upload step). `invalid_parameter` alone is
+    HeyGen's generic error code for almost any bad request field, so matching on
+    it broadly (a prior version of this function did) misclassifies unrelated
+    errors — e.g. a bad prompt or an invalid reference-image URL during
+    generate-look — as "please re-upload your photo", hiding the real cause.
+    generate-look never uploads the user's photo bytes, so this same wording
+    appearing there refers to a HeyGen-side reference image, not the user's
+    upload — never call this from that handler.
+    """
+    lowered = err_msg.lower()
+    return "content type not match" in lowered
+
+
+def _extract_heygen_error_detail(err_msg: str) -> str:
+    """
+    Pulls the human-readable `message` out of a raw HeyGen error string like
+    'HeyGen X API Error (400): {"error":{"code":"invalid_parameter",...,"message":"..."}}'
+    (or the flatter asset-upload shape '{"code":400543,"message":"..."}') so the
+    client sees HeyGen's actual explanation instead of the raw wrapped JSON.
+    Falls back to the original string if it isn't parseable JSON.
+    """
+    import json
+    brace_idx = err_msg.find("{")
+    if brace_idx == -1:
+        return err_msg
+    try:
+        payload = json.loads(err_msg[brace_idx:])
+    except (json.JSONDecodeError, ValueError):
+        return err_msg
+    node = payload.get("error", payload) if isinstance(payload, dict) else {}
+    if isinstance(node, dict) and node.get("message"):
+        return str(node["message"])
+    return err_msg
+
+
+async def _normalize_reference_image_url(url: str) -> Optional[str]:
+    """
+    HeyGen's own POST /v3/avatars validates a `reference_images` URL's declared
+    Content-Type against its actual bytes and rejects any mismatch with
+    "Content type not match image/jpeg != image/png" — and at least one entry in
+    HeyGen's own public Look Gallery is mislabeled this way (served at a .jpg URL
+    with a `Content-Type: image/jpeg` header, while the underlying bytes are
+    actually PNG), so passing that gallery URL straight through fails every time,
+    independent of the user's own uploaded photo (confirmed by fetching the URL
+    directly: header says image/jpeg, magic bytes are 89 50 4E 47 = PNG).
+
+    We don't control that upstream asset's metadata. Since HeyGen's own asset
+    service (used successfully for the user's own photo in create_base_avatar)
+    always sets Content-Type from what WE pass it, re-uploading the reference
+    image through that same pipeline — with the type verified against its real
+    bytes via `_detect_image_content_type` — produces a fresh CDN URL where the
+    declared and actual type always agree, regardless of which upstream Look
+    asset is mislabeled. Returns None (caller skips this reference image) if the
+    fetch/detection/re-upload fails for any reason — reference_images is optional.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                logger.warning(f"Reference image fetch returned HTTP {resp.status_code} for {url}; skipping this reference image.")
+                return None
+            content = resp.content
+    except Exception as exc:
+        logger.warning(f"Reference image fetch failed for {url}: {exc}; skipping this reference image.")
+        return None
+
+    real_content_type = _detect_image_content_type(content)
+    if not real_content_type:
+        logger.warning(f"Reference image at {url} is not a recognizable JPG/PNG/WEBP; skipping this reference image.")
+        return None
+
+    try:
+        asset_info = await heygen_service.upload_asset_bytes(content, content_type=real_content_type)
+    except Exception as exc:
+        logger.warning(f"Reference image re-upload to HeyGen failed for {url}: {exc}; skipping this reference image.")
+        return None
+
+    normalized_url = asset_info.get("url")
+    if not normalized_url:
+        return None
+
+    logger.info(
+        f"Reference image normalized: original_url={url}, detected_content_type={real_content_type}, "
+        f"normalized_url={normalized_url}"
+    )
+    return normalized_url
 
 
 @router.post("/upload-photo")
@@ -149,6 +244,13 @@ async def create_base_avatar(
             detail=f"Stored photo '{filename}' is not a valid JPG, PNG, or WEBP image."
         )
 
+    logger.info(
+        f"create-base-avatar image diagnostics: scenario_id={scenario.avatar_scenario_id}, "
+        f"filename={filename}, file_size_bytes={len(file_bytes)}, "
+        f"signature_hex={file_bytes[:12].hex()}, detected_content_type={real_content_type}, "
+        f"upload_content_type={real_content_type}"
+    )
+
     scenario.creation_status = "BASE_CREATING"
     db.commit()
 
@@ -184,11 +286,23 @@ async def create_base_avatar(
 
     except Exception as exc:
         err_msg = str(exc)
-        logger.error(f"Base Photo Avatar Creation Failed: {err_msg}")
+        logger.error(
+            f"Base Photo Avatar Creation Failed: scenario_id={scenario.avatar_scenario_id}, "
+            f"filename={filename}, detected_content_type={real_content_type}, raw_heygen_error={err_msg}"
+        )
         scenario.creation_status = "FAILED"
         scenario.creation_error = err_msg
         db.commit()
-        raise HTTPException(status_code=500, detail=f"Base Photo Avatar creation error: {err_msg}")
+
+        # Only the raw-bytes upload step above sends the user's own photo, so a
+        # Content-Type mismatch here genuinely means their upload was bad.
+        if _is_raw_upload_content_type_mismatch(err_msg):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported image format. Please upload a supported image such as JPG, PNG, or WebP."
+            )
+
+        raise HTTPException(status_code=500, detail=f"Base Photo Avatar creation error: {_extract_heygen_error_detail(err_msg)}")
 
 
 @router.post("/generate-look")
@@ -272,10 +386,41 @@ async def generate_look_for_avatar(
         scenario.framing = look.camera_framing or "medium"
         scenario.aspect_ratio = look.aspect_ratio or "16:9"
     else:
-        raise HTTPException(status_code=400, detail="Please select a Look before generating the avatar.")
+        raise HTTPException(status_code=400, detail="Please select an avatar look before generating.")
+
+    # Verify the exact Look/Doctor/Scenario identity the frontend selected before ever
+    # calling HeyGen — this must always reflect the CURRENT request, never prior state.
+    logger.info(
+        f"generate-look request verified: doctor_id={doctor_id}, scenario_id={scenario.avatar_scenario_id}, "
+        f"selected_look_id={heygen_look_id or look_id}, selected_look_name={heygen_look_name}, "
+        f"selected_look_preview={heygen_look_preview_image_url}, base_look_id={scenario.heygen_base_look_id}"
+    )
 
     scenario.creation_status = "LOOK_SUBMITTED"
     db.commit()
+
+    # HeyGen's own public Look Gallery has at least one preview asset whose declared
+    # Content-Type doesn't match its actual bytes (confirmed: a .jpg URL serving real
+    # PNG bytes), which HeyGen's own /v3/avatars endpoint then rejects. We don't
+    # control that upstream metadata, so re-upload each reference image through
+    # HeyGen's asset service with a Content-Type verified against its real bytes —
+    # the same sniff-then-declare approach already used for the user's own photo —
+    # producing a URL where declared and actual type are guaranteed to agree.
+    raw_ref_images = list(ref_images)
+    ref_images = []
+    for raw_url in raw_ref_images:
+        normalized = await _normalize_reference_image_url(raw_url)
+        if normalized:
+            ref_images.append(normalized)
+
+    logger.info(
+        f"generate-look image diagnostics: scenario_id={scenario.avatar_scenario_id}, "
+        f"base_look_id={scenario.heygen_base_look_id}, raw_reference_image_urls={raw_ref_images or 'none'}, "
+        f"normalized_reference_image_urls={ref_images or 'none'} "
+        f"(note: generate-look never uploads the user's own photo bytes — only base_look_id + these "
+        f"reference URLs are sent, so a HeyGen Content-Type error here is about a reference image, "
+        f"not the user's upload)"
+    )
 
     try:
         res = await heygen_service.generate_avatar_look(
@@ -314,8 +459,12 @@ async def generate_look_for_avatar(
 
     except Exception as exc:
         err_msg = str(exc)
-        logger.error(f"HeyGen Look Generation Failed: {err_msg}")
-        
+        logger.error(
+            f"HeyGen Look Generation Failed: scenario_id={scenario.avatar_scenario_id}, "
+            f"base_look_id={scenario.heygen_base_look_id}, reference_image_urls={ref_images or 'none'}, "
+            f"raw_heygen_error={err_msg}"
+        )
+
         if "is not in a usable state" in err_msg:
             scenario.creation_status = "BASE_PROCESSING"
             db.commit()
@@ -327,7 +476,15 @@ async def generate_look_for_avatar(
         scenario.creation_status = "FAILED"
         scenario.creation_error = err_msg
         db.commit()
-        raise HTTPException(status_code=500, detail=f"HeyGen Look Generation error: {err_msg}")
+
+        # generate-look never uploads the user's own photo bytes (only base_look_id
+        # + optional HeyGen-hosted reference-image URLs are sent), so a failure here
+        # is never "your uploaded photo is the wrong format" — expose HeyGen's real
+        # reason instead of guessing at one.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"HeyGen Look Generation failed: {_extract_heygen_error_detail(err_msg)}"
+        )
 
 
 @router.get("/{id}/status")

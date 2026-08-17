@@ -49,7 +49,9 @@ export const ConfigPreview = () => {
         settings: {
           ...settings,
           aspect_ratio: selectedScenario?.aspect_ratio || settings.aspect_ratio || '16:9',
-          engine: isAvatarIV ? 'avatar_iv' : 'v2'
+          // Photo Avatars render through HeyGen's Avatar IV engine so doctor videos get
+          // natural body/hand motion instead of the static-body V2 talking_photo renderer.
+          engine: (isPhoto || isAvatarIV) ? 'avatar_iv' : 'v2'
         }
       };
 
@@ -73,7 +75,7 @@ export const ConfigPreview = () => {
         </div>
         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Configuration Preview</h2>
         <p className="text-slate-500 text-sm mt-2 max-w-lg mx-auto">
-          Review your complete AI video setup before submitting to the official HeyGen rendering engine.
+          Review your complete AI video setup before generating your final video.
         </p>
       </div>
 
@@ -222,7 +224,7 @@ export const ConfigPreview = () => {
           ) : (
             <Play className="w-5 h-5 fill-current" />
           )}
-          <span>{submitting ? 'Submitting to HeyGen...' : 'Generate Final Video'}</span>
+          <span>{submitting ? 'Submitting Video...' : 'Generate Final Video'}</span>
         </button>
       </div>
     </div>

@@ -80,7 +80,7 @@ export const Avatars = () => {
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Doctor Avatar Library</h2>
           <p className="text-xs text-slate-500">
-            Real HeyGen Photo Avatars created for Doctors (PB-AVT-xxxx) ready for video generation.
+            Photo Avatars created for Doctors (PB-AVT-xxxx) ready for video generation.
           </p>
         </div>
 
@@ -111,7 +111,7 @@ export const Avatars = () => {
               activeTab === 'catalog' ? 'bg-[#005570] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            HeyGen Studio Catalog ({heygenAvatars.length})
+            Studio Catalog ({heygenAvatars.length})
           </button>
         </div>
 
@@ -146,7 +146,7 @@ export const Avatars = () => {
               <UserRound className="w-10 h-10 mx-auto text-slate-300" />
               <div>
                 <p className="text-sm font-bold text-slate-700">No Doctor Avatars Created Yet</p>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">Select an Avatar Scenario and upload a Doctor photo to create a real HeyGen Photo Avatar.</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">Select an Avatar Scenario and upload a Doctor photo to create a Photo Avatar.</p>
               </div>
               <button
                 onClick={() => navigate('/app/create-video')}

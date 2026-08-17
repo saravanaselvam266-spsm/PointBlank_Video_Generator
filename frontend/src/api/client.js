@@ -24,12 +24,56 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// The backend's raw `detail` text sometimes names the underlying AI provider or
+// includes technical/JSON fragments (e.g. "HeyGen Look Generation API Error
+// (400): {...}"). PointBlank is presented as its own product, so no user-facing
+// message may ever mention the provider or leak that raw text — this maps known
+// backend error shapes to clean product copy, and anything unrecognized (or
+// still mentioning the provider) falls back to one generic, safe message. The
+// original text is preserved in the console warning below for developer
+// debugging, never in what reaches UI state.
+const sanitizeApiErrorMessage = (raw) => {
+  if (!raw || typeof raw !== 'string') {
+    return 'Something went wrong. Please try again.';
+  }
+
+  const lower = raw.toLowerCase();
+
+  if (lower.includes('insufficient_credits') || lower.includes('insufficient credits')) {
+    return 'This action could not be completed right now. Please contact support.';
+  }
+  if (lower.includes('avatar_not_found') || lower.includes('no longer available') || lower.includes('no longer recognized')) {
+    return 'The selected avatar is no longer available. Please choose another one.';
+  }
+  if (lower.includes('is not in a usable state') || lower.includes('still being prepared')) {
+    return 'Your avatar is still being prepared. Please wait a moment and try again.';
+  }
+  if (lower.includes('unsupported image format') || lower.includes('supported image such as jpg')) {
+    return 'Unsupported image format. Please upload a JPG, PNG, or WebP photo.';
+  }
+  if (lower.includes('storing the video') && lower.includes('failed')) {
+    return 'Video generation completed, but saving the video failed. Please retry.';
+  }
+  if (lower.includes('still being stored')) {
+    return 'Your video is still being saved. Please try again shortly.';
+  }
+
+  // Any message we don't explicitly recognize as already-clean product copy —
+  // including anything naming the provider or containing raw technical detail
+  // (status codes, JSON) — is replaced rather than risk exposing it.
+  if (/heygen/i.test(raw) || raw.includes('{') || /error\s*\(\d/i.test(raw)) {
+    return 'Something went wrong while processing your request. Please try again.';
+  }
+
+  return raw;
+};
+
 // Response Interceptor: Normalize Errors
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status;
-    let message = error.response?.data?.detail || error.message;
+    let message = sanitizeApiErrorMessage(error.response?.data?.detail || error.message);
 
     if (!error.response || error.code === 'ERR_NETWORK') {
       message = 'Backend server is not running on http://localhost:8000. Please start the backend service using uvicorn app.main:app --port 8000.';
@@ -40,7 +84,7 @@ apiClient.interceptors.response.use(
       window.location.href = '/login';
     }
 
-    console.warn(`API Notification (${status || 'Network'}):`, message);
+    console.warn(`API Notification (${status || 'Network'}):`, error.response?.data?.detail || error.message);
     return Promise.reject(new Error(message));
   }
 );
@@ -113,7 +157,9 @@ export const videoApi = {
   generate: (data) => apiClient.post('/videos/generate', data),
   getStatus: (id) => apiClient.get(`/videos/${id}/status`),
   list: (doctorId) => apiClient.get('/videos', { params: { doctor_id: doctorId } }),
-  get: (id) => apiClient.get(`/videos/${id}`)
+  get: (id) => apiClient.get(`/videos/${id}`),
+  getDownloadUrl: (id) => apiClient.get(`/videos/${id}/download`),
+  retryStorage: (id) => apiClient.post(`/videos/${id}/storage/retry`)
 };
 
 export const publicApi = {

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { publicApi } from '../../api/client';
-import { Download, QrCode, Share2, Copy, Check, ExternalLink, RefreshCw, ShieldCheck } from 'lucide-react';
+import { publicApi, videoApi } from '../../api/client';
+import { Download, QrCode, Share2, Copy, Check, ExternalLink, RefreshCw, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 
 export const ResultView = () => {
-  const { activeVideo, currentDoctor, resetStudio } = useApp();
+  const { activeVideo, setActiveVideo, currentDoctor, resetStudio } = useApp();
   const [shareData, setShareData] = useState(null);
   const [copied, setCopied] = useState(false);
   const [loadingShare, setLoadingShare] = useState(false);
+  const [storageActionLoading, setStorageActionLoading] = useState(false);
+  const [storageActionError, setStorageActionError] = useState(null);
 
   useEffect(() => {
     if (activeVideo?.id && activeVideo.status === 'COMPLETED') {
@@ -46,13 +48,38 @@ export const ResultView = () => {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  const handleDownloadVideo = () => {
-    const a = document.createElement('a');
-    a.href = permanentPlaybackUrl;
-    a.download = `PointBlank_Doctor_Video_${activeVideo.id}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownloadVideo = async () => {
+    setStorageActionError(null);
+    setStorageActionLoading(true);
+    try {
+      // Backend returns a short-lived Azure SAS URL — the browser downloads
+      // directly from Azure, the FastAPI backend never proxies the file bytes.
+      const res = await videoApi.getDownloadUrl(activeVideo.id);
+      const downloadUrl = res.data.download_url;
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `PointBlank_Doctor_Video_${activeVideo.id}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      setStorageActionError(err.message || 'Unable to download the video right now.');
+    } finally {
+      setStorageActionLoading(false);
+    }
+  };
+
+  const handleRetryStorage = async () => {
+    setStorageActionError(null);
+    setStorageActionLoading(true);
+    try {
+      const res = await videoApi.retryStorage(activeVideo.id);
+      setActiveVideo(res.data);
+    } catch (err) {
+      setStorageActionError(err.message || 'Storage retry failed. Please try again.');
+    } finally {
+      setStorageActionLoading(false);
+    }
   };
 
   const handleDownloadQR = () => {
@@ -65,16 +92,30 @@ export const ResultView = () => {
     document.body.removeChild(a);
   };
 
+  const storageStatus = activeVideo.storage_status || 'pending';
+
   return (
     <div className="max-w-5xl mx-auto p-6 text-left">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold mb-3">
-          <ShieldCheck className="w-4 h-4 mr-1.5" />
-          <span>PointBlank Permanent Storage Active</span>
-        </div>
+        {storageStatus === 'uploaded' ? (
+          <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold mb-3">
+            <ShieldCheck className="w-4 h-4 mr-1.5" />
+            <span>Final Video Ready — Stored in Azure Blob Storage</span>
+          </div>
+        ) : storageStatus === 'failed' ? (
+          <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold mb-3">
+            <AlertTriangle className="w-4 h-4 mr-1.5" />
+            <span>Video generated, but storage failed</span>
+          </div>
+        ) : (
+          <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold mb-3">
+            <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+            <span>Storing video...</span>
+          </div>
+        )}
         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">AI Video Rendered Successfully</h2>
         <p className="text-slate-500 text-sm mt-2 max-w-lg mx-auto">
-          Play, download, and share your doctor AI video via permanent PointBlank storage and QR code.
+          Play, download, and share your doctor AI video via Azure Blob Storage and QR code.
         </p>
       </div>
 
@@ -109,19 +150,45 @@ export const ResultView = () => {
                     PB-VID: {activeVideo.id}
                   </span>
                   <span className="px-2 py-0.5 rounded bg-slate-50 text-[10px] font-mono text-slate-500 border border-slate-200">
-                    HeyGen: {activeVideo.heygen_video_id}
+                    Reference ID: {activeVideo.heygen_video_id}
                   </span>
                 </div>
               </div>
 
-              <button
-                onClick={handleDownloadVideo}
-                className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-bold text-sm transition-all shadow-lg shadow-[#005570]/20"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download MP4</span>
-              </button>
+              {storageStatus === 'uploaded' ? (
+                <button
+                  onClick={handleDownloadVideo}
+                  disabled={storageActionLoading}
+                  className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-bold text-sm transition-all shadow-lg shadow-[#005570]/20 disabled:opacity-60"
+                >
+                  {storageActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  <span>{storageActionLoading ? 'Preparing Download...' : 'Download MP4'}</span>
+                </button>
+              ) : storageStatus === 'failed' ? (
+                <button
+                  onClick={handleRetryStorage}
+                  disabled={storageActionLoading}
+                  className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm transition-all shadow-lg shadow-rose-600/20 disabled:opacity-60"
+                >
+                  {storageActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  <span>{storageActionLoading ? 'Retrying...' : 'Retry Storage'}</span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-slate-200 text-slate-500 font-bold text-sm cursor-not-allowed"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Storing video...</span>
+                </button>
+              )}
             </div>
+
+            {storageActionError && (
+              <div className="mx-6 mb-4 px-4 py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                {storageActionError}
+              </div>
+            )}
           </div>
 
           {/* Script Overview Card */}

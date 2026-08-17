@@ -13,8 +13,7 @@ import {
   ArrowUpRight,
   UserRound,
   AudioLines,
-  AlertCircle,
-  Layers
+  AlertCircle
 } from 'lucide-react';
 
 export const Dashboard = () => {
@@ -63,7 +62,7 @@ export const Dashboard = () => {
             {getGreeting()}, {user?.full_name || 'Saravana Perumal'}
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 max-w-2xl">
-            {currentDoctor ? `Active Workspace: ${currentDoctor.doctor_name} (${currentDoctor.specialization})` : 'Create doctor avatar scenarios, saved voices, and AI videos with real HeyGen rendering.'}
+            {currentDoctor ? `Active Workspace: ${currentDoctor.doctor_name} (${currentDoctor.specialization})` : 'Create doctor avatar scenarios, saved voices, and AI videos with professional rendering.'}
           </p>
         </div>
 
@@ -79,10 +78,10 @@ export const Dashboard = () => {
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Doctors</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Doctors</p>
             <p className="text-2xl font-extrabold text-slate-900">{isLoading ? '...' : summary?.total_doctors ?? 0}</p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-teal-50 text-[#005570] flex items-center justify-center border border-teal-100">
@@ -92,21 +91,11 @@ export const Dashboard = () => {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Scenarios</p>
-            <p className="text-2xl font-extrabold text-slate-900">{isLoading ? '...' : summary?.total_scenarios ?? 0}</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Videos Created</p>
+            <p className="text-2xl font-extrabold text-slate-900">{isLoading ? '...' : summary?.total_videos ?? 0}</p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-[#E6F3F7] text-[#005570] flex items-center justify-center border border-[#007799]/20">
-            <Layers className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Saved Voices</p>
-            <p className="text-2xl font-extrabold text-slate-900">{isLoading ? '...' : summary?.total_voices ?? 0}</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-            <AudioLines className="w-5 h-5" />
+            <Video className="w-5 h-5" />
           </div>
         </div>
 
@@ -198,7 +187,7 @@ export const Dashboard = () => {
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900">Recent Healthcare Videos</h3>
-            <p className="text-xs text-slate-500">Real-time status tracking from PostgreSQL and HeyGen API</p>
+            <p className="text-xs text-slate-500">Real-time status tracking for your video library</p>
           </div>
           <button
             onClick={() => navigate('/app/videos')}
@@ -225,7 +214,7 @@ export const Dashboard = () => {
             </div>
             <div>
               <p className="text-sm font-bold text-slate-800">No videos created yet</p>
-              <p className="text-xs text-slate-500">Create your first AI healthcare video with real HeyGen generation.</p>
+              <p className="text-xs text-slate-500">Create your first AI healthcare video.</p>
             </div>
             <button
               onClick={() => navigate('/app/create-video')}

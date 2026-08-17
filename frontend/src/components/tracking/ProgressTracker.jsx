@@ -25,7 +25,7 @@ export const ProgressTracker = ({ onCompleted }) => {
         setActiveVideo(updatedVid);
 
         if (updatedVid.status === 'PENDING') {
-          setUiStatusLabel('Queued in HeyGen Processing Pipeline...');
+          setUiStatusLabel('Queued for processing...');
         } else if (updatedVid.status === 'PROCESSING') {
           setUiStatusLabel('Rendering AI Avatar & Lip-Sync Audio...');
         } else if (updatedVid.status === 'COMPLETED') {
@@ -43,7 +43,7 @@ export const ProgressTracker = ({ onCompleted }) => {
           return;
         } else if (updatedVid.status === 'FAILED') {
           setUiStatusLabel('Video Generation Failed');
-          setError(updatedVid.error_message || 'HeyGen Video Generation Encountered an Error.');
+          setError(updatedVid.error_message || 'Video generation encountered an error.');
           setIsGenerating(false);
           return;
         }
@@ -78,7 +78,7 @@ export const ProgressTracker = ({ onCompleted }) => {
           </div>
           <h3 className="text-2xl font-extrabold text-slate-900 mb-2">Video Generation Complete!</h3>
           <p className="text-sm text-slate-500 max-w-md mx-auto mb-6">
-            The MP4 video has been rendered by HeyGen and permanently stored in PointBlank storage.
+            Your video has been generated and permanently stored in PointBlank.
           </p>
         </div>
       ) : activeVideo.status === 'FAILED' ? (
@@ -88,7 +88,7 @@ export const ProgressTracker = ({ onCompleted }) => {
           </div>
           <h3 className="text-2xl font-extrabold text-slate-900 mb-2">Generation Failed</h3>
           <p className="text-xs text-rose-700 bg-rose-50 p-4 rounded-2xl border border-rose-200 max-w-md mx-auto mb-6">
-            {error || activeVideo.error_message || 'HeyGen API returned an error status.'}
+            {error || activeVideo.error_message || 'The video could not be generated. Please try again.'}
           </p>
         </div>
       ) : (
@@ -100,13 +100,13 @@ export const ProgressTracker = ({ onCompleted }) => {
 
           <h3 className="text-2xl font-bold text-slate-900 mb-2">{uiStatusLabel}</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto mb-6">
-            PointBlank Backend is polling HeyGen API status asynchronously. Real status:{' '}
+            We're checking on your video's progress. Current status:{' '}
             <span className="font-mono text-[#005570] font-bold">{activeVideo.status}</span>
           </p>
 
           <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-[#E6F3F7] text-xs text-slate-600 border border-[#007799]/20">
             <ShieldCheck className="w-4 h-4 text-[#005570]" />
-            <span>HeyGen Video ID: <strong className="font-mono text-slate-800">{activeVideo.heygen_video_id}</strong></span>
+            <span>Reference ID: <strong className="font-mono text-slate-800">{activeVideo.heygen_video_id}</strong></span>
           </div>
         </div>
       )}

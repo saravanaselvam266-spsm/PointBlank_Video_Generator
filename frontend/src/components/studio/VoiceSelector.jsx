@@ -136,7 +136,7 @@ export const VoiceSelector = () => {
         </div>
         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Select Doctor Voice</h2>
         <p className="text-slate-500 text-sm mt-1 max-w-lg mx-auto">
-          Choose a saved voice for {currentDoctor?.doctor_name || 'the Doctor'} or pick from official HeyGen AI voices.
+          Choose a saved voice for {currentDoctor?.doctor_name || 'the Doctor'} or pick from our AI voice library.
         </p>
       </div>
 
@@ -149,9 +149,9 @@ export const VoiceSelector = () => {
 
       {/* Info Notice for Voice Cloning */}
       <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-slate-600 text-xs flex items-center justify-between">
-        <span>Custom voice cloning is not available through this HeyGen API account configuration.</span>
+        <span>Custom voice cloning is not currently available for this account.</span>
         <span className="px-2.5 py-1 rounded bg-white text-slate-700 border border-slate-200 font-medium shadow-xs">
-          Standard HeyGen AI Library Active
+          Standard AI Voice Library Active
         </span>
       </div>
 
@@ -178,7 +178,7 @@ export const VoiceSelector = () => {
             }`}
           >
             <Volume2 className="w-4 h-4" />
-            <span>HeyGen Live AI Voices ({heygenVoices.length})</span>
+            <span>AI Voice Library ({heygenVoices.length})</span>
           </button>
         </div>
 
@@ -195,7 +195,7 @@ export const VoiceSelector = () => {
         <div className="space-y-4">
           {savedVoices.length === 0 ? (
             <div className="p-8 text-center bg-white border border-slate-200 rounded-2xl text-slate-500">
-              <p className="text-sm">No saved voices for this doctor yet. Browse the HeyGen AI Library tab below to save one.</p>
+              <p className="text-sm">No saved voices for this doctor yet. Browse the AI Voice Library tab below to save one.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -291,7 +291,7 @@ export const VoiceSelector = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Loader2 className="w-8 h-8 text-[#005570] animate-spin mb-3" />
-              <p className="text-slate-500 text-sm">Retrieving Live Voices from HeyGen API...</p>
+              <p className="text-slate-500 text-sm">Loading voices...</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto pr-2">

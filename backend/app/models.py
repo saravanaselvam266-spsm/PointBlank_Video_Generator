@@ -232,6 +232,8 @@ class Video(Base):
     video_url = Column(Text, nullable=True) # HeyGen CDN URL
     thumbnail_url = Column(Text, nullable=True)
     storage_key = Column(Text, nullable=True) # Permanent PointBlank Storage Key
+    azure_blob_name = Column(Text, nullable=True) # Azure Blob path, e.g. videos/PB-DOC-000001/PB-VID-000001.mp4
+    storage_status = Column(String(50), default="pending", index=True) # pending, uploading, uploaded, failed
     error_message = Column(Text, nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)

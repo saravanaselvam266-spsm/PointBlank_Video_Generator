@@ -10,6 +10,7 @@ from app.database import engine
 from app.routers import auth, users, dashboard, doctors, heygen, videos, public, avatar_scenarios, voices, avatar_looks
 from app.scripts.create_admin import create_initial_admin
 from app.scripts.seed_avatar_looks import seed_avatar_looks
+from app.services.azure_blob import azure_blob_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
@@ -108,12 +109,17 @@ def on_startup():
 
 @app.get("/health")
 def health_check():
+    # check_connection() never raises — always returns a credential-free status dict,
+    # so a slow/unreachable Azure account degrades this field, not the whole endpoint.
+    azure_status = azure_blob_service.check_connection()
     return {
         "status": "healthy",
         "project": settings.PROJECT_NAME,
         "environment": settings.ENVIRONMENT,
         "database": "PostgreSQL",
-        "heygen_enabled": settings.HEYGEN_ENABLED
+        "heygen_enabled": settings.HEYGEN_ENABLED,
+        "azure_blob": azure_status.get("azure_blob"),
+        "azure_container": azure_status.get("container")
     }
 
 if __name__ == "__main__":

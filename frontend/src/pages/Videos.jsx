@@ -120,7 +120,7 @@ export const Videos = () => {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   <th className="py-3.5 px-4">PointBlank ID</th>
-                  <th className="py-3.5 px-4">HeyGen Job ID</th>
+                  <th className="py-3.5 px-4">Reference ID</th>
                   <th className="py-3.5 px-4">Doctor</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4">Created</th>

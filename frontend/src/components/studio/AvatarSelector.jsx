@@ -53,7 +53,7 @@ export const AvatarSelector = () => {
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Failed to fetch HeyGen Avatars');
+      setError(err.message || 'Failed to load avatars.');
     } finally {
       setLoading(false);
     }
@@ -95,7 +95,7 @@ export const AvatarSelector = () => {
       setSelectedAvatar(photoAvObj);
     } catch (err) {
       console.error(err);
-      setPhotoError(err.message || 'Photo Avatar creation failed on HeyGen API');
+      setPhotoError(err.message || 'Photo avatar creation failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -111,9 +111,9 @@ export const AvatarSelector = () => {
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#E6F3F7] text-[#005570] border border-[#007799]/20 mb-4">
           <UserCheck className="w-8 h-8" />
         </div>
-        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Select HeyGen Avatar</h2>
+        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Select Avatar</h2>
         <p className="text-slate-500 text-sm mt-2 max-w-lg mx-auto">
-          Choose a real Studio Avatar from HeyGen or upload a doctor photo to initiate the official HeyGen Photo Avatar workflow.
+          Choose a Studio Avatar or upload a doctor photo to create a Photo Avatar.
         </p>
       </div>
 
@@ -161,7 +161,7 @@ export const AvatarSelector = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 className="w-8 h-8 text-[#005570] animate-spin mb-3" />
-              <p className="text-slate-500 text-sm">Retrieving Live Avatars from HeyGen API...</p>
+              <p className="text-slate-500 text-sm">Loading avatars...</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -218,9 +218,9 @@ export const AvatarSelector = () => {
           <div className="mb-6 p-4 rounded-2xl bg-[#E6F3F7] border border-[#007799]/30 text-left flex items-start space-x-3">
             <Sparkles className="w-5 h-5 text-[#005570] flex-shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-bold text-slate-900 text-sm">Official HeyGen Avatar IV (v3 Engine) Active</h4>
+              <h4 className="font-bold text-slate-900 text-sm">Avatar IV (v3 Engine) Active</h4>
               <p className="text-xs text-slate-600 mt-0.5">
-                Default HeyGen v3 rendering engine supporting high-expressiveness, arbitrary image animation, motion prompts, and natural gesture control.
+                Default v3 rendering engine supporting high-expressiveness, arbitrary image animation, motion prompts, and natural gesture control.
               </p>
             </div>
           </div>
@@ -228,7 +228,7 @@ export const AvatarSelector = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 className="w-8 h-8 text-[#005570] animate-spin mb-3" />
-              <p className="text-slate-500 text-sm">Retrieving Avatar IV list from HeyGen V3 API...</p>
+              <p className="text-slate-500 text-sm">Loading Avatar IV avatars...</p>
             </div>
           ) : avatarsV3List.length === 0 ? (
             <div className="p-8 text-center bg-white border border-slate-200 rounded-2xl">
@@ -301,8 +301,7 @@ export const AvatarSelector = () => {
           </div>
           <h3 className="text-xl font-bold text-slate-900 mb-2">Upload Doctor Photo</h3>
           <p className="text-xs text-slate-500 mb-6">
-            Upload a clear front-facing doctor portrait. The backend will invoke the official HeyGen Photo Avatar creation API and register the confirmed{' '}
-            <span className="font-mono text-[#005570] font-bold">talking_photo_id</span>.
+            Upload a clear front-facing doctor portrait to create a Photo Avatar for this doctor.
           </p>
 
           {photoError && (
@@ -315,7 +314,7 @@ export const AvatarSelector = () => {
           {uploading ? (
             <div className="py-12 flex flex-col items-center justify-center">
               <Loader2 className="w-10 h-10 text-[#005570] animate-spin mb-3" />
-              <p className="text-sm font-semibold text-slate-900">Processing Photo Avatar via HeyGen API...</p>
+              <p className="text-sm font-semibold text-slate-900">Processing Photo Avatar...</p>
               <p className="text-xs text-slate-500 mt-1">Registering talking photo resource anchor</p>
             </div>
           ) : uploadedPhoto ? (
@@ -345,7 +344,7 @@ export const AvatarSelector = () => {
           </div>
           <h3 className="text-xl font-bold text-slate-900 mb-2">Instant Digital Twin Avatars</h3>
           <p className="text-sm text-slate-600 mb-4">
-            Instant Avatar / Digital Twin creation requires enterprise account configuration and manual training on HeyGen.
+            Instant Avatar / Digital Twin creation requires enterprise account configuration and manual training.
           </p>
           <div className="p-4 rounded-xl bg-slate-50 text-xs text-slate-500 border border-slate-200">
             Please use Studio Avatars or Photo Avatars for automated API video generation.

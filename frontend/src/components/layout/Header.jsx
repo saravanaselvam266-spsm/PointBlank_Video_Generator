@@ -30,7 +30,7 @@ export const Header = () => {
                 AI STUDIO
               </span>
             </div>
-            <p className="text-xs text-slate-400">Official Healthcare HeyGen Video Engine</p>
+            <p className="text-xs text-slate-400">Professional Healthcare AI Video Engine</p>
           </div>
         </div>
 
@@ -61,7 +61,7 @@ export const Header = () => {
         <div className="flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full font-medium">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
           <ShieldCheck className="w-4 h-4" />
-          <span>Official HeyGen V2/V3 API Connected</span>
+          <span>AI Video Engine Connected</span>
         </div>
 
       </div>

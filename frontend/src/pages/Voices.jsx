@@ -91,7 +91,7 @@ export const Voices = () => {
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Voice Library</h2>
           <p className="text-xs text-slate-500">
-            Manage Doctor Saved Voices (PB-VCE-xxxx) and explore HeyGen AI multi-lingual voice library.
+            Manage Doctor Saved Voices (PB-VCE-xxxx) and explore our AI multi-lingual voice library.
           </p>
         </div>
 
@@ -121,7 +121,7 @@ export const Voices = () => {
               activeTab === 'catalog' ? 'bg-[#005570] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            HeyGen AI Library ({heygenVoices.length})
+            AI Voice Library ({heygenVoices.length})
           </button>
         </div>
 
@@ -155,12 +155,12 @@ export const Voices = () => {
             <div className="p-12 text-center bg-white border border-slate-200 rounded-2xl text-slate-500">
               <AudioLines className="w-10 h-10 mx-auto mb-2 text-slate-300" />
               <p className="text-sm font-bold text-slate-700">No Saved Doctor Voices</p>
-              <p className="text-xs text-slate-400 mt-1 mb-4">Save voices from the HeyGen AI Library to assign them to doctor profiles.</p>
+              <p className="text-xs text-slate-400 mt-1 mb-4">Save voices from the AI Voice Library to assign them to doctor profiles.</p>
               <button
                 onClick={() => setActiveTab('catalog')}
                 className="px-4 py-2 rounded-xl bg-[#005570] text-white text-xs font-bold"
               >
-                Browse HeyGen Voices
+                Browse Voice Library
               </button>
             </div>
           ) : (

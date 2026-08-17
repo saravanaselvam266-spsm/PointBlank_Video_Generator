@@ -247,6 +247,8 @@ class VideoResponse(BaseModel):
     video_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
     storage_key: Optional[str] = None
+    azure_blob_name: Optional[str] = None
+    storage_status: Optional[str] = "pending"
     error_message: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None

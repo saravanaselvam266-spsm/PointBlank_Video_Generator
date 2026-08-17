@@ -411,7 +411,9 @@ class HeyGenService:
         heygen_voice_id: str,
         avatar_id: str,
         engine: str = "avatar_iv",
-        aspect_ratio: str = "16:9"
+        aspect_ratio: str = "16:9",
+        motion_prompt: Optional[str] = None,
+        expressiveness: Optional[str] = None
     ) -> str:
         """
         Generates video using official HeyGen Avatar IV Engine via POST /v3/videos.
@@ -421,8 +423,12 @@ class HeyGenService:
             "avatar_id": "<REAL_AVATAR_ID>",
             "script": "<SCRIPT>",
             "voice_id": "<VOICE_ID>",
-            "engine": { "type": "avatar_iv" }
+            "engine": { "type": "avatar_iv" },
+            "motion_prompt": "<natural language body-motion instruction>",
+            "expressiveness": "low" | "medium" | "high"
         }
+        motion_prompt/expressiveness are only documented for Photo Avatars rendered
+        via the avatar_iv engine, so callers should omit them for other engines.
         """
         url = f"{self.base_url}/v3/videos"
         headers = self._get_headers()
@@ -437,7 +443,16 @@ class HeyGenService:
             }
         }
 
-        logger.info(f"Submitting HeyGen V3 Avatar IV Video Job: avatar_id={avatar_id}, voice={heygen_voice_id}, engine={engine}")
+        if engine == "avatar_iv":
+            if motion_prompt:
+                payload["motion_prompt"] = motion_prompt
+            if expressiveness:
+                payload["expressiveness"] = expressiveness
+
+        logger.info(
+            f"Submitting HeyGen V3 Avatar IV Video Job: avatar_id={avatar_id}, voice={heygen_voice_id}, "
+            f"engine={engine}, motion_prompt={'set' if motion_prompt else 'none'}, expressiveness={expressiveness}"
+        )
 
         async with httpx.AsyncClient(timeout=45.0) as client:
             response = await client.post(url, headers=headers, json=payload)

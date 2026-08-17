@@ -28,7 +28,14 @@ class Settings(BaseSettings):
     # Storage & Base URLs
     STORAGE_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
     PUBLIC_BASE_URL: str = "http://localhost:5250"
-    
+
+    # Azure Blob Storage (single shared container — see app/services/azure_blob.py)
+    AZURE_STORAGE_DEFAULT_ENDPOINTS_PROTOCOL: str = "https"
+    AZURE_STORAGE_ACCOUNT_NAME: str = ""
+    AZURE_STORAGE_ACCOUNT_KEY: str = ""
+    AZURE_STORAGE_ENDPOINT_SUFFIX: str = "core.windows.net"
+    AZURE_STORAGE_CONTAINER_NAME: str = ""
+
     # Initial Admin Setup (Loaded safely from .env)
     INITIAL_ADMIN_EMAIL: str = "admin@pointblank.co.in"
     INITIAL_ADMIN_PASSWORD: str = "PointBlank2026Admin!"

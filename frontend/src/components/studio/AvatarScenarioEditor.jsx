@@ -150,7 +150,7 @@ export const AvatarScenarioEditor = () => {
           <div>
             <h3 className="text-lg font-bold text-slate-900">No ready avatars are available for this doctor yet</h3>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Create a new AI avatar for {currentDoctor.doctor_name} using official HeyGen look generation.
+              Create a new AI avatar for {currentDoctor.doctor_name} using professional look generation.
             </p>
           </div>
           <button

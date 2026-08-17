@@ -102,9 +102,9 @@ export const VideoDetails = () => {
                 ) : (
                   <div className="p-8 text-center text-slate-300 space-y-3">
                     <Loader2 className="w-8 h-8 mx-auto animate-spin text-cyan-400" />
-                    <p className="text-xs font-semibold">Processing HeyGen Video Render...</p>
+                    <p className="text-xs font-semibold">Processing Video...</p>
                     <p className="text-[11px] text-slate-400">
-                      HeyGen Job ID: <span className="font-mono">{video.heygen_video_id}</span>
+                      Reference ID: <span className="font-mono">{video.heygen_video_id}</span>
                     </p>
                   </div>
                 )}
@@ -134,7 +134,7 @@ export const VideoDetails = () => {
                   <span className="font-mono font-bold text-[#007799]">{video.video_id}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-100">
-                  <span className="text-slate-500">HeyGen Job ID</span>
+                  <span className="text-slate-500">Reference ID</span>
                   <span className="font-mono text-slate-700">{video.heygen_video_id || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-100">

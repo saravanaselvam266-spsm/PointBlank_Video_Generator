@@ -1,4 +1,5 @@
 import logging
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,11 +9,71 @@ from app.models import User, DoctorProfile, Video, AvatarScenario, Voice, get_ne
 from app.schemas import VideoGenerateRequest, VideoResponse
 from app.dependencies.auth import get_current_user
 from app.services.heygen_service import heygen_service
-from app.services.storage_service import storage_service
+from app.services.azure_blob import azure_blob_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/videos", tags=["Videos"])
+
+AZURE_STORAGE_UPLOAD_FAILED_DETAIL = (
+    "Video generation completed, but storing the video in Azure failed. Please retry the storage operation."
+)
+
+
+async def _store_completed_video_in_azure(video: Video, db: Session) -> None:
+    """
+    HeyGen Completed -> Download -> Azure Blob -> PostgreSQL reference.
+
+    Idempotent: if the blob already exists (e.g. this is a retry, or the status
+    poll ran twice), the video is never re-downloaded/re-uploaded — only the DB
+    reference is (re)confirmed. A failure here only ever updates storage_status;
+    it must never flip video.status away from COMPLETED, since HeyGen generation
+    itself already succeeded.
+    """
+    if not video.video_url:
+        raise RuntimeError("No HeyGen video_url available to store.")
+
+    doctor_business_id = video.doctor.doctor_id if video.doctor else video.doctor_id
+    blob_name = f"videos/{doctor_business_id}/{video.video_id}.mp4"
+
+    if azure_blob_service.blob_exists(blob_name):
+        video.azure_blob_name = blob_name
+        video.storage_status = "uploaded"
+        db.commit()
+        logger.info(f"Video {video.video_id} already present in Azure at '{blob_name}' — skipped re-upload.")
+        return
+
+    video.storage_status = "uploading"
+    db.commit()
+
+    try:
+        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+            res = await client.get(video.video_url)
+            if res.status_code != 200:
+                raise RuntimeError(f"Failed to download completed video from HeyGen CDN ({res.status_code}).")
+            video_bytes = res.content
+
+        azure_blob_service.upload_bytes(blob_name, video_bytes, content_type="video/mp4")
+
+        video.azure_blob_name = blob_name
+        video.storage_status = "uploaded"
+        db.commit()
+        logger.info(f"Video {video.video_id} stored in Azure Blob at '{blob_name}' ({len(video_bytes)} bytes).")
+    except Exception:
+        video.storage_status = "failed"
+        db.commit()
+        raise
+
+# Default Avatar IV motion instruction for PointBlank's healthcare Photo Avatars.
+# Only applied to the avatar_iv engine (Photo Avatars) — never to Studio (v2) avatars.
+DEFAULT_DOCTOR_MOTION_PROMPT = (
+    "Natural professional doctor presentation gestures while speaking. Use subtle hand "
+    "gestures to emphasize important points, natural head movement, relaxed shoulders, "
+    "realistic posture shifts, occasional open-hand gestures, and calm conversational body "
+    "language. Keep movements controlled, professional, realistic, and appropriate for a "
+    "healthcare consultation. Do not make exaggerated or distracting movements."
+)
+DEFAULT_AVATAR_IV_EXPRESSIVENESS = "medium"
 
 
 @router.post("/generate", response_model=VideoResponse, status_code=status.HTTP_201_CREATED)
@@ -113,7 +174,9 @@ async def generate_video(
             **resolved_settings
         }
 
-    engine_name = resolved_settings.get("engine", "avatar_iv" if resolved_avatar_type == "avatar_iv" else "v2")
+    # Photo Avatars default to the Avatar IV engine (natural body/hand motion). Studio (v2)
+    # avatars keep the v2 engine unless explicitly overridden via settings.engine.
+    engine_name = resolved_settings.get("engine", "avatar_iv" if is_photo else "v2")
 
     # 4. Pre-validate HeyGen ID against live catalog before sending
     available_avatar_ids = set()
@@ -188,12 +251,16 @@ async def generate_video(
 
         if engine_name == "avatar_iv":
             try:
+                motion_prompt = resolved_settings.get("motion_prompt") or DEFAULT_DOCTOR_MOTION_PROMPT
+                expressiveness = resolved_settings.get("expressiveness") or DEFAULT_AVATAR_IV_EXPRESSIVENESS
                 heygen_video_id = await heygen_service.generate_video_v3(
                     script=new_video.script,
                     heygen_voice_id=resolved_voice_id,
                     avatar_id=target_heygen_id,
                     engine="avatar_iv",
-                    aspect_ratio=aspect_ratio
+                    aspect_ratio=aspect_ratio,
+                    motion_prompt=motion_prompt,
+                    expressiveness=expressiveness
                 )
             except Exception as v3_err:
                 logger.warning(f"V3 generate_video_v3 failed ({v3_err}), falling back to V2 endpoint...")
@@ -281,20 +348,18 @@ async def get_video_status(
                 video.video_url = status_data.get("video_url")
                 video.thumbnail_url = status_data.get("thumbnail_url")
                 video.completed_at = utc_now()
-
-                # Download & store locally for permanent access
-                if video.video_url:
-                    try:
-                        storage_result = await storage_service.download_and_store_video(
-                            video.video_url, str(video.id)
-                        )
-                        video.storage_key = storage_result.get("storage_key")
-                        logger.info(f"Video {id} stored permanently at {video.storage_key}")
-                    except Exception as st_err:
-                        logger.warning(f"Storage download failed for {id}: {st_err}")
-
                 db.commit()
                 db.refresh(video)
+
+                # HeyGen succeeded — now store the completed video in Azure Blob
+                # Storage. A failure here must NOT flip the video away from
+                # COMPLETED; only storage_status reflects the Azure outcome.
+                if video.video_url:
+                    try:
+                        await _store_completed_video_in_azure(video, db)
+                    except Exception as st_err:
+                        logger.warning(f"Azure storage failed for video {id}: {st_err}")
+                    db.refresh(video)
 
             elif h_status == "FAILED":
                 video.status = "FAILED"
@@ -313,6 +378,89 @@ async def get_video_status(
     if video.saved_voice:
         res.voice_name = video.saved_voice.name
     return res
+
+
+@router.post("/{id}/storage/retry", response_model=VideoResponse)
+async def retry_video_storage(
+    id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retries storing an already-completed HeyGen video in Azure Blob Storage.
+    Only valid once HeyGen generation itself has succeeded. Idempotent — if the
+    blob already exists, this just re-confirms the DB reference rather than
+    re-uploading.
+    """
+    video = db.query(Video).filter(Video.id == id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video record not found.")
+
+    if current_user.role != "ADMIN" and video.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied to video record.")
+
+    if video.status != "COMPLETED" or not video.video_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Video generation must complete successfully before storage can be retried."
+        )
+
+    try:
+        await _store_completed_video_in_azure(video, db)
+    except Exception as exc:
+        logger.error(f"Azure storage retry failed for video {id}: {exc}")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=AZURE_STORAGE_UPLOAD_FAILED_DETAIL)
+
+    db.refresh(video)
+    res = VideoResponse.model_validate(video)
+    if video.doctor:
+        res.doctor_name = video.doctor.doctor_name
+    if video.avatar_scenario:
+        res.scenario_name = video.avatar_scenario.name
+    if video.saved_voice:
+        res.voice_name = video.saved_voice.name
+    return res
+
+
+@router.get("/{id}/download")
+async def get_video_download_url(
+    id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns a short-lived Azure SAS URL for the completed video so the frontend
+    can download/stream it directly from Azure — the backend never proxies the
+    file bytes itself, and the Azure AccountKey is never exposed to the client.
+    """
+    video = db.query(Video).filter(Video.id == id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video record not found.")
+
+    if current_user.role != "ADMIN" and video.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied to video record.")
+
+    if video.storage_status == "failed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=AZURE_STORAGE_UPLOAD_FAILED_DETAIL
+        )
+    if video.storage_status != "uploaded" or not video.azure_blob_name:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Video is still being stored. Please try again shortly."
+        )
+
+    try:
+        download_url = azure_blob_service.generate_download_sas_url(video.azure_blob_name)
+    except Exception as exc:
+        logger.error(f"Azure SAS URL generation failed for video {id}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Unable to generate a download link for the stored video. Please try again."
+        )
+
+    return {"download_url": download_url, "expires_in_minutes": 15}
 
 
 @router.get("", response_model=List[VideoResponse])

@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { videoApi } from '../../api/client';
 import { Download, QrCode, Share2, Copy, Check, ExternalLink, RefreshCw, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 import { Badge } from '../ui/Badge';
+import { SlateTag } from '../ui/SlateTag';
 
 const SpinningLoader = (props) => <Loader2 {...props} className={`${props.className || ''} animate-spin`} />;
 
@@ -100,7 +101,7 @@ export const ResultView = () => {
   const storageStatus = activeVideo.storage_status || 'pending';
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8 pb-reveal">
       <div className="text-center space-y-3">
         {storageStatus === 'uploaded' ? (
           <Badge variant="success" icon={ShieldCheck}>Video ready — securely stored</Badge>
@@ -109,17 +110,17 @@ export const ResultView = () => {
         ) : (
           <Badge variant="warning" icon={SpinningLoader}>Saving your video…</Badge>
         )}
-        <h2 className="text-3xl font-extrabold text-[#1F2937] tracking-tight">Video Ready</h2>
-        <p className="text-[#6B7280] text-sm max-w-lg mx-auto">
-          Play, download, and share your doctor's AI video with a link or QR code.
+        <h2 className="font-display text-3xl text-ink tracking-tight">Video ready</h2>
+        <p className="text-ink-soft text-sm max-w-lg mx-auto">
+          Play, download, and share your doctor's video with a link or QR code.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Player Column */}
+        {/* Main Player Column — the video is the hero */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="rounded-3xl bg-white border border-[#E5E7EB] overflow-hidden shadow-sm">
-            <div className="aspect-video bg-[#0F172A] relative flex items-center justify-center">
+          <div className="rounded-3xl bg-surface border border-line overflow-hidden shadow-panel">
+            <div className="aspect-video bg-ink relative flex items-center justify-center">
               {permanentPlaybackUrl ? (
                 <video
                   src={permanentPlaybackUrl}
@@ -129,43 +130,41 @@ export const ResultView = () => {
                   className="w-full h-full object-contain"
                 />
               ) : (
-                <div className="text-slate-300 text-sm">Loading video…</div>
+                <div className="text-white/50 text-sm">Loading video…</div>
               )}
             </div>
 
-            <div className="p-6 flex flex-wrap items-center justify-between gap-4 border-t border-[#F5F7F8]">
+            <div className="p-6 flex flex-wrap items-center justify-between gap-4 border-t border-line">
               <div className="min-w-0">
-                <h3 className="font-bold text-[#1F2937] text-lg truncate">
+                <h3 className="font-display text-lg text-ink truncate">
                   {currentDoctor?.doctor_name || 'Doctor Video'}
                 </h3>
-                <p className="text-xs text-[#6B7280] truncate">{currentDoctor?.specialization}</p>
-                <span className="inline-block mt-2 px-2 py-0.5 rounded bg-[#E6F3F7] text-[10px] font-mono text-[#005570] border border-[#007799]/20">
-                  Video ID: {activeVideo.video_id || activeVideo.id}
-                </span>
+                <p className="text-xs text-ink-muted truncate">{currentDoctor?.specialization}</p>
+                <SlateTag className="mt-2">{activeVideo.video_id || activeVideo.id}</SlateTag>
               </div>
 
               {storageStatus === 'uploaded' ? (
                 <button
                   onClick={handleDownloadVideo}
                   disabled={storageActionLoading}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-bold text-sm transition-all shadow-md shadow-[#005570]/20 disabled:opacity-60"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-signal hover:bg-signal-strong text-white font-semibold text-sm transition-all shadow-cta disabled:opacity-60"
                 >
                   {storageActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                  <span>{storageActionLoading ? 'Preparing download…' : 'Download Video'}</span>
+                  <span>{storageActionLoading ? 'Preparing download…' : 'Download video'}</span>
                 </button>
               ) : storageStatus === 'failed' ? (
                 <button
                   onClick={handleRetryStorage}
                   disabled={storageActionLoading}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm transition-all shadow-md shadow-rose-600/20 disabled:opacity-60"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-error hover:brightness-95 text-white font-semibold text-sm transition-all"
                 >
                   {storageActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                  <span>{storageActionLoading ? 'Retrying…' : 'Retry Saving Video'}</span>
+                  <span>{storageActionLoading ? 'Retrying…' : 'Retry saving video'}</span>
                 </button>
               ) : (
                 <button
                   disabled
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#F5F7F8] text-[#9CA3AF] font-bold text-sm cursor-not-allowed"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-surface-sunken text-ink-muted font-semibold text-sm cursor-not-allowed"
                 >
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Saving video…</span>
@@ -174,16 +173,16 @@ export const ResultView = () => {
             </div>
 
             {storageActionError && (
-              <div className="mx-6 mb-5 px-4 py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              <div className="mx-6 mb-5 px-4 py-2.5 rounded-xl bg-error-soft border border-error/25 text-error text-xs">
                 {storageActionError}
               </div>
             )}
           </div>
 
           {/* Script Overview Card */}
-          <div className="p-6 rounded-3xl bg-white border border-[#E5E7EB]">
-            <h4 className="font-bold text-[#1F2937] text-sm mb-2">Video script</h4>
-            <p className="text-xs text-[#374151] bg-[#F5F7F8] p-4 rounded-2xl border border-[#E5E7EB] leading-relaxed italic">
+          <div className="p-6 rounded-3xl bg-surface border border-line">
+            <h4 className="font-semibold text-ink text-sm mb-2">Video script</h4>
+            <p className="text-xs text-ink-soft bg-surface-sunken p-4 rounded-2xl border border-line leading-relaxed italic">
               "{activeVideo.script}"
             </p>
           </div>
@@ -192,20 +191,18 @@ export const ResultView = () => {
         {/* Sharing & QR Code Column */}
         <div className="space-y-6">
           {/* QR Code Card */}
-          <div className="p-6 rounded-3xl bg-white border border-[#E5E7EB] text-center space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#1F2937] flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-[#005570]" />
-                <span>QR code</span>
-              </span>
-            </div>
+          <div className="p-6 rounded-3xl bg-surface border border-line text-center space-y-4">
+            <span className="text-xs font-semibold text-ink flex items-center justify-center gap-2">
+              <QrCode className="w-4 h-4 text-signal" />
+              <span>QR code</span>
+            </span>
 
             {shareData?.qr_image ? (
-              <div className="p-4 bg-white rounded-2xl inline-block border border-[#F5F7F8] mx-auto">
+              <div className="p-4 bg-surface rounded-2xl inline-block border border-line mx-auto">
                 <img src={shareData.qr_image} alt="Scan to watch this video" className="w-44 h-44 object-contain" />
               </div>
             ) : (
-              <div className="w-44 h-44 bg-[#F5F7F8] border border-[#E5E7EB] rounded-2xl mx-auto flex items-center justify-center text-xs text-[#9CA3AF]">
+              <div className="w-44 h-44 bg-surface-sunken border border-line rounded-2xl mx-auto flex items-center justify-center text-xs text-ink-muted">
                 {loadingShare ? 'Generating…' : 'Not available yet'}
               </div>
             )}
@@ -213,21 +210,21 @@ export const ResultView = () => {
             <button
               onClick={handleDownloadQR}
               disabled={!shareData?.qr_image}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#F5F7F8] hover:bg-[#EEF1F2] text-[#374151] font-medium text-xs transition-all border border-[#E5E7EB] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-sunken hover:brightness-95 text-ink-soft font-medium text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download className="w-3.5 h-3.5 text-[#005570]" />
+              <Download className="w-3.5 h-3.5 text-signal" />
               <span>Download QR code</span>
             </button>
           </div>
 
           {/* Public Watch Link Card */}
-          <div className="p-6 rounded-3xl bg-white border border-[#E5E7EB] space-y-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-[#1F2937]">
-              <Share2 className="w-4 h-4 text-[#005570]" />
+          <div className="p-6 rounded-3xl bg-surface border border-line space-y-4">
+            <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+              <Share2 className="w-4 h-4 text-signal" />
               <span>Shareable link</span>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#E6F3F7] border border-[#007799]/20 text-xs font-mono text-[#005570] truncate">
+            <div className="p-3 rounded-xl bg-signal-soft border border-signal/15 text-xs font-mono text-signal truncate">
               {publicWatchUrl || (loadingShare ? 'Generating share link…' : 'Not available yet')}
             </div>
 
@@ -235,9 +232,9 @@ export const ResultView = () => {
               <button
                 onClick={handleCopyLink}
                 disabled={!publicWatchUrl}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#F5F7F8] hover:bg-[#EEF1F2] text-[#374151] font-medium text-xs transition-all border border-[#E5E7EB] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-surface-sunken hover:brightness-95 text-ink-soft font-medium text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied!' : 'Copy link'}</span>
               </button>
 
@@ -246,8 +243,8 @@ export const ResultView = () => {
                 target="_blank"
                 rel="noreferrer"
                 aria-disabled={!publicWatchUrl}
-                className={`inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#E6F3F7] text-[#005570] font-medium text-xs transition-all border border-[#007799]/20 ${
-                  publicWatchUrl ? 'hover:bg-[#D0E8EF]' : 'opacity-50 pointer-events-none'
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-signal-soft text-signal font-medium text-xs transition-all ${
+                  publicWatchUrl ? 'hover:brightness-95' : 'opacity-50 pointer-events-none'
                 }`}
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -259,10 +256,10 @@ export const ResultView = () => {
           {/* New Video Action */}
           <button
             onClick={resetStudio}
-            className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-white hover:bg-[#F5F7F8] text-[#374151] font-bold text-sm transition-all border border-[#E5E7EB]"
+            className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-surface hover:bg-surface-sunken text-ink-soft font-semibold text-sm transition-all border border-line"
           >
-            <RefreshCw className="w-4 h-4 text-[#005570]" />
-            <span>Create Another Video</span>
+            <RefreshCw className="w-4 h-4 text-signal" />
+            <span>Create another video</span>
           </button>
         </div>
       </div>

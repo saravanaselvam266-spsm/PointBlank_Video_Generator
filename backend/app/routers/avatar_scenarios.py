@@ -13,7 +13,7 @@ from app.schemas import AvatarScenarioCreate, AvatarScenarioUpdate, AvatarScenar
 from app.dependencies.auth import get_current_user
 from app.services.heygen_service import heygen_service
 from app.services.media_utils import sniff_image_content_type, extension_for_content_type
-from app.services.media_resolve import mirror_avatar_preview_to_azure, mirror_original_photo_to_azure, resolve_avatar_photo_url
+from app.services.media_resolve import mirror_avatar_preview_to_azure, mirror_original_photo_to_azure, resolve_avatar_photo_url, resolve_avatar_thumbnail_url
 
 logger = logging.getLogger(__name__)
 
@@ -595,6 +595,7 @@ async def check_avatar_look_status(
                 if scenario.look:
                     res_obj.look_name = scenario.look.name
                 res_obj.photo_url = resolve_avatar_photo_url(scenario)
+                res_obj.thumbnail_url = resolve_avatar_thumbnail_url(scenario)
 
                 return {
                     "status": "completed",
@@ -643,6 +644,7 @@ async def check_avatar_look_status(
         if scenario.look:
             res_obj.look_name = scenario.look.name
         res_obj.photo_url = resolve_avatar_photo_url(scenario)
+        res_obj.thumbnail_url = resolve_avatar_thumbnail_url(scenario)
 
         return {
             "status": "completed",
@@ -688,6 +690,7 @@ def list_avatar_scenarios(
         if sc.look:
             sc_res.look_name = sc.look.name
         sc_res.photo_url = resolve_avatar_photo_url(sc)
+        sc_res.thumbnail_url = resolve_avatar_thumbnail_url(sc)
         res_list.append(sc_res)
 
     return res_list
@@ -717,6 +720,7 @@ def get_avatar_scenario_details(
     if sc.look:
         res.look_name = sc.look.name
     res.photo_url = resolve_avatar_photo_url(sc)
+    res.thumbnail_url = resolve_avatar_thumbnail_url(sc)
     return res
 
 

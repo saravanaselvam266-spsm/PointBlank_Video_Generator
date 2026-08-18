@@ -8,14 +8,54 @@ import {
   Video,
   Loader2,
   CheckCircle2,
-  Plus,
   Play,
   ArrowUpRight,
-  UserRound,
+  Bot,
   AudioLines,
-  AlertCircle
+  AlertCircle,
+  ImageOff,
+  Library
 } from 'lucide-react';
 import { EmptyState } from '../components/ui/EmptyState';
+import { Badge } from '../components/ui/Badge';
+import { SlateTag } from '../components/ui/SlateTag';
+
+const PulseRow = ({ icon: Icon, label, value, tone = 'neutral', spin = false }) => {
+  const toneClasses = {
+    neutral: 'bg-surface-sunken text-ink-muted',
+    success: 'bg-success-soft text-success',
+    warning: 'bg-warning-soft text-warning',
+  }[tone];
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-line last:border-0">
+      <div className="flex items-center gap-2.5">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${toneClasses}`}>
+          <Icon className={`w-4 h-4 ${spin ? 'animate-spin' : ''}`} strokeWidth={1.75} />
+        </div>
+        <span className="text-sm text-ink-soft">{label}</span>
+      </div>
+      <span className="font-display text-xl text-ink">{value ?? '—'}</span>
+    </div>
+  );
+};
+
+const QuickLink = ({ icon: Icon, label, description, to, navigate }) => (
+  <button
+    onClick={() => navigate(to)}
+    className="group flex-1 min-w-[220px] p-4 rounded-2xl bg-surface border border-line hover:border-accent/50 hover:bg-signal-soft/40 transition-all text-left flex items-center gap-3"
+  >
+    <div className="w-10 h-10 rounded-xl bg-signal-soft text-signal flex items-center justify-center shrink-0">
+      <Icon className="w-5 h-5" strokeWidth={1.75} />
+    </div>
+    <div className="min-w-0 flex-1">
+      <p className="font-semibold text-sm text-ink">{label}</p>
+      <p className="text-xs text-ink-muted truncate">{description}</p>
+    </div>
+    <ArrowUpRight className="w-4 h-4 text-ink-muted group-hover:text-signal group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0" />
+  </button>
+);
+
+const videoStatusVariant = (status) => (status === 'COMPLETED' ? 'success' : status === 'FAILED' ? 'danger' : 'warning');
 
 export const Dashboard = () => {
   const { user } = useAuth();
@@ -50,243 +90,137 @@ export const Dashboard = () => {
     return 'Good evening';
   };
 
+  const firstName = (user?.full_name || 'there').split(' ')[0];
+
   return (
-    <div className="space-y-8 font-sans">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-white via-[#FAFAFA] to-[#E6F3F7]/40 p-6 sm:p-8 rounded-2xl border border-[#E5E7EB] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#E6F3F7] text-[#005570]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#007799] animate-pulse"></span>
-            <span>PointBlank AI Video Generator</span>
+    <div className="space-y-10 font-sans">
+      {/* Hero: welcome + primary action + workspace pulse */}
+      <section className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+        <div className="xl:col-span-8 pb-card p-8 sm:p-10 flex flex-col justify-between gap-8 pb-reveal">
+          <div className="space-y-4">
+            {user?.user_id && <SlateTag>{user.user_id}</SlateTag>}
+            <h1 className="font-display text-4xl sm:text-[2.75rem] text-ink tracking-tight leading-[1.08]">
+              {getGreeting()}, {firstName}.
+            </h1>
+            <p className="text-ink-soft text-[15px] max-w-xl leading-relaxed">
+              {currentDoctor
+                ? `Your active workspace is ${currentDoctor.doctor_name} — ${currentDoctor.specialization}.`
+                : 'Bring a doctor, avatar, voice, and script together into a finished video.'}
+            </p>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1F2937] tracking-tight">
-            {getGreeting()}, {user?.full_name || 'there'}
-          </h2>
-          <p className="text-sm text-[#6B7280] max-w-2xl">
-            {currentDoctor
-              ? `Active workspace: ${currentDoctor.doctor_name} (${currentDoctor.specialization})`
-              : 'Create doctor avatars, saved voices, and AI videos with professional rendering.'}
-          </p>
-        </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => navigate('/app/create-video')}
-            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-bold text-sm shadow-md shadow-[#005570]/20 transition-all hover:scale-[1.02]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create New Video</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Total Doctors</p>
-            <p className="text-2xl font-extrabold text-[#1F2937]">{isLoading ? '—' : summary?.total_doctors ?? 0}</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-[#E6F3F7] text-[#005570] flex items-center justify-center border border-[#007799]/20">
-            <Stethoscope className="w-5 h-5" />
+          <div className="flex flex-wrap items-center gap-5">
+            <button
+              onClick={() => navigate('/app/create-video')}
+              className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-2xl bg-signal hover:bg-signal-strong text-white font-semibold text-sm shadow-cta transition-all hover:-translate-y-0.5"
+            >
+              <Video className="w-4.5 h-4.5" strokeWidth={1.75} />
+              <span>Create a video</span>
+            </button>
+            <div className="pb-rule flex-1 min-w-[40px] hidden sm:block" />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Total Videos</p>
-            <p className="text-2xl font-extrabold text-[#1F2937]">{isLoading ? '—' : summary?.total_videos ?? 0}</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-[#E6F3F7] text-[#005570] flex items-center justify-center border border-[#007799]/20">
-            <Video className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Processing</p>
-            <p className="text-2xl font-extrabold text-[#1F2937]">{isLoading ? '—' : summary?.processing_videos ?? 0}</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-            <Loader2 className="w-5 h-5 animate-spin" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Completed</p>
-            <p className="text-2xl font-extrabold text-[#1F2937]">{isLoading ? '—' : summary?.completed_videos ?? 0}</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Actions Panel */}
-      <div className="space-y-4">
-        <h3 className="text-base font-bold text-[#1F2937] tracking-tight">Quick Actions</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <button
-            onClick={() => navigate('/app/create-video')}
-            className="p-4 rounded-2xl bg-[#005570] text-white hover:bg-[#004055] transition-all text-left space-y-2 shadow-xs group"
-          >
-            <div className="flex items-center justify-between">
-              <Video className="w-5 h-5 text-cyan-300" />
-              <ArrowUpRight className="w-4 h-4 opacity-70 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-            </div>
-            <div>
-              <p className="font-bold text-sm">Create New Video</p>
-              <p className="text-xs text-cyan-100/80">Launch the 7-step video workflow</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate('/app/doctors')}
-            className="p-4 rounded-2xl bg-white border border-[#E5E7EB] hover:border-[#007799] transition-all text-left space-y-2 group shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <Stethoscope className="w-5 h-5 text-[#005570]" />
-              <ArrowUpRight className="w-4 h-4 text-[#9CA3AF] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-            </div>
-            <div>
-              <p className="font-bold text-sm text-[#1F2937]">Doctor Profiles</p>
-              <p className="text-xs text-[#6B7280]">Manage physicians & credentials</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate('/app/avatars')}
-            className="p-4 rounded-2xl bg-white border border-[#E5E7EB] hover:border-[#007799] transition-all text-left space-y-2 group shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <UserRound className="w-5 h-5 text-[#005570]" />
-              <ArrowUpRight className="w-4 h-4 text-[#9CA3AF] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-            </div>
-            <div>
-              <p className="font-bold text-sm text-[#1F2937]">Avatar Library</p>
-              <p className="text-xs text-[#6B7280]">Manage doctor avatars & styles</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate('/app/voices')}
-            className="p-4 rounded-2xl bg-white border border-[#E5E7EB] hover:border-[#007799] transition-all text-left space-y-2 group shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <AudioLines className="w-5 h-5 text-[#005570]" />
-              <ArrowUpRight className="w-4 h-4 text-[#9CA3AF] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-            </div>
-            <div>
-              <p className="font-bold text-sm text-[#1F2937]">Doctor Voices</p>
-              <p className="text-xs text-[#6B7280]">Manage saved AI voices</p>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Recent Videos Table */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-xs">
-        <div className="p-5 border-b border-[#F5F7F8] flex items-center justify-between gap-3">
+        <div className="xl:col-span-4 pb-card p-6 pb-reveal" style={{ '--pb-i': 1 }}>
+          <h3 className="font-display text-lg text-ink mb-1">Workspace pulse</h3>
+          <p className="text-xs text-ink-muted mb-1">What's happening right now</p>
           <div>
-            <h3 className="text-base font-bold text-[#1F2937]">Recent Videos</h3>
-            <p className="text-xs text-[#6B7280]">Live status for the videos you've generated</p>
+            <PulseRow icon={CheckCircle2} label="Completed videos" value={isLoading ? null : summary?.completed_videos} tone="success" />
+            <PulseRow icon={Loader2} label="Rendering now" value={isLoading ? null : summary?.processing_videos} tone="warning" spin={!isLoading && summary?.processing_videos > 0} />
+            <PulseRow icon={Stethoscope} label="Doctors" value={isLoading ? null : summary?.total_doctors} />
+            <PulseRow icon={AudioLines} label="Voices ready" value={isLoading ? null : summary?.total_voices} />
+          </div>
+        </div>
+      </section>
+
+      {/* Quick actions */}
+      <section className="flex flex-wrap gap-3 pb-reveal" style={{ '--pb-i': 2 }}>
+        <QuickLink navigate={navigate} icon={Stethoscope} label="Doctors" description="Manage physician profiles" to="/app/doctors" />
+        <QuickLink navigate={navigate} icon={Bot} label="AI Library" description="Reusable AI avatars & voices" to="/app/ai-library" />
+        <QuickLink navigate={navigate} icon={Library} label="Video Library" description="Every generated video" to="/app/videos" />
+      </section>
+
+      {/* Recent activity — media workspace list */}
+      <section className="pb-card overflow-hidden pb-reveal" style={{ '--pb-i': 3 }}>
+        <div className="p-5 border-b border-line flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-lg text-ink">Recent videos</h3>
+            <p className="text-xs text-ink-muted">Live status for what you've generated</p>
           </div>
           <button
             onClick={() => navigate('/app/videos')}
-            className="text-xs font-bold text-[#007799] hover:underline shrink-0"
+            className="text-xs font-semibold text-signal hover:underline shrink-0"
           >
-            View All
+            View all
           </button>
         </div>
 
         {isLoading ? (
-          <div className="p-12 text-center text-[#6B7280] flex flex-col items-center gap-3">
-            <Loader2 className="w-6 h-6 animate-spin text-[#005570]" />
+          <div className="p-12 text-center text-ink-muted flex flex-col items-center gap-3">
+            <Loader2 className="w-6 h-6 animate-spin text-signal" />
             <p className="text-xs font-medium">Loading recent videos…</p>
           </div>
         ) : errorMsg ? (
-          <div className="p-8 text-center text-rose-600 flex flex-col items-center gap-2">
+          <div className="p-8 text-center text-error flex flex-col items-center gap-2">
             <AlertCircle className="w-6 h-6" />
             <p className="text-xs font-medium">{errorMsg}</p>
           </div>
         ) : !summary?.recent_videos || summary.recent_videos.length === 0 ? (
           <EmptyState
             icon={Video}
-            title="No videos created yet"
-            description="Create your first AI healthcare video to see it here."
+            title="No videos yet"
+            description="Create your first doctor video to see it here."
             className="border-0 rounded-none"
             action={
               <button
                 onClick={() => navigate('/app/create-video')}
-                className="px-5 py-2.5 rounded-xl bg-[#005570] text-white text-sm font-bold hover:bg-[#004055] transition-colors"
+                className="px-5 py-2.5 rounded-xl bg-signal text-white text-sm font-semibold hover:bg-signal-strong transition-colors"
               >
-                Create Your First Video
+                Create your first video
               </button>
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#F5F7F8] border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">
-                  <th className="py-3 px-4">Video</th>
-                  <th className="py-3 px-4">Doctor</th>
-                  <th className="py-3 px-4">Avatar / Voice</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Created</th>
-                  <th className="py-3 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F5F7F8] text-xs">
-                {summary.recent_videos.map((vid) => (
-                  <tr key={vid.id} className="hover:bg-[#F5F7F8]/80 transition-colors">
-                    <td className="py-3 px-4 font-mono font-semibold text-[#007799]">
-                      {vid.video_id}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-[#1F2937]">
-                      {vid.doctor_name || 'Doctor'}
-                    </td>
-                    <td className="py-3 px-4 text-[11px] text-[#374151]">
-                      <div>{vid.scenario_name || 'Custom Avatar'}</div>
-                      <div className="text-[10px] text-[#9CA3AF]">{vid.voice_name || 'AI Voice'}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      {vid.status === 'COMPLETED' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3 mr-1" />
-                          Completed
-                        </span>
-                      ) : vid.status === 'FAILED' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                          Failed
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          Processing
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-[#6B7280]">
-                      {new Date(vid.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => navigate(`/app/videos/${vid.id}`)}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-[#F5F7F8] hover:bg-[#E6F3F7] hover:text-[#005570] text-[#374151] text-xs font-semibold transition-colors"
-                      >
-                        <Play className="w-3 h-3" />
-                        <span>View</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="divide-y divide-line">
+            {summary.recent_videos.slice(0, 6).map((vid) => (
+              <li
+                key={vid.id}
+                onClick={() => navigate(`/app/videos/${vid.id}`)}
+                className="flex items-center gap-4 p-4 hover:bg-surface-sunken/60 transition-colors cursor-pointer"
+              >
+                <div className="w-16 h-10 rounded-lg bg-surface-sunken border border-line overflow-hidden flex items-center justify-center shrink-0">
+                  {vid.thumbnail_url ? (
+                    <img src={vid.thumbnail_url} alt="" loading="lazy" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                  ) : null}
+                  <ImageOff className="w-3.5 h-3.5 text-ink-muted" style={{ display: vid.thumbnail_url ? 'none' : 'flex' }} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm text-ink truncate">{vid.doctor_name || 'Doctor'}</p>
+                    <SlateTag>{vid.video_id}</SlateTag>
+                  </div>
+                  <p className="text-xs text-ink-muted truncate">{vid.scenario_name || 'Custom avatar'} · {vid.voice_name || 'AI voice'}</p>
+                </div>
+
+                <div className="hidden sm:block text-xs text-ink-muted shrink-0">
+                  {new Date(vid.created_at).toLocaleDateString()}
+                </div>
+
+                <Badge
+                  variant={videoStatusVariant(vid.status)}
+                  icon={vid.status === 'COMPLETED' ? CheckCircle2 : vid.status === 'FAILED' ? AlertCircle : Loader2}
+                  pulse={vid.status !== 'COMPLETED' && vid.status !== 'FAILED'}
+                >
+                  {vid.status === 'COMPLETED' ? 'Completed' : vid.status === 'FAILED' ? 'Failed' : 'Processing'}
+                </Badge>
+
+                <Play className="w-4 h-4 text-ink-muted shrink-0 hidden sm:block" />
+              </li>
+            ))}
+          </ul>
         )}
-      </div>
+      </section>
     </div>
   );
 };

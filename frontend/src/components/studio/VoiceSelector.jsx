@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { heyGenApi, voiceApi } from '../../api/client';
-import { Volume2, Play, Pause, CheckCircle2, Search, Loader2, AlertCircle, Save, BookmarkCheck } from 'lucide-react';
+import { Volume2, Play, Pause, CheckCircle2, Search, Loader2, Save, BookmarkCheck, UploadCloud, Clock, XCircle } from 'lucide-react';
 import { StepHeader } from '../ui/StepHeader';
 import { WizardFooter } from '../ui/WizardFooter';
+import { AlertBanner } from '../ui/AlertBanner';
+import { Badge } from '../ui/Badge';
+import { UploadDoctorVoiceModal } from '../voice/UploadDoctorVoiceModal';
 
 export const VoiceSelector = () => {
   const { currentDoctor, selectedVoiceRecord, setSelectedVoiceRecord, selectedVoice, setSelectedVoice, setActiveStep } = useApp();
@@ -23,6 +26,7 @@ export const VoiceSelector = () => {
   // Playing audio state
   const [playingVoiceId, setPlayingVoiceId] = useState(null);
   const [audioElement, setAudioElement] = useState(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   useEffect(() => {
     fetchVoicesData();
@@ -31,7 +35,7 @@ export const VoiceSelector = () => {
     };
   }, [currentDoctor]);
 
-  const fetchVoicesData = async () => {
+  const fetchVoicesData = async (preferVoiceId = null) => {
     setLoading(true);
     setError(null);
     try {
@@ -48,16 +52,28 @@ export const VoiceSelector = () => {
       const hgList = Array.isArray(resHg.data) ? resHg.data : resHg.data?.voices || [];
       setHeygenVoices(hgList);
 
-      // Default selection logic
-      if (savedList.length > 0 && !selectedVoiceRecord) {
-        setSelectedVoiceRecord(savedList[0]);
-        setSelectedVoice({ voice_id: savedList[0].heygen_voice_id, name: savedList[0].name });
-      } else if (hgList.length > 0 && !selectedVoice) {
+      // Default selection: only ever auto-select a READY voice (clone_status
+      // absent/"ready" covers legacy catalog-saved voices too). Prefer a
+      // just-uploaded voice, then the doctor's marked default, then the sole
+      // ready voice if there's exactly one.
+      const readyVoices = savedList.filter((v) => !v.clone_status || v.clone_status === 'ready');
+      const preferred = preferVoiceId ? readyVoices.find((v) => v.id === preferVoiceId) : null;
+      const defaultVoice = preferred || readyVoices.find((v) => v.is_default) || (readyVoices.length === 1 ? readyVoices[0] : null);
+
+      if (defaultVoice) {
+        setSelectedVoiceRecord(defaultVoice);
+        setSelectedVoice({ voice_id: defaultVoice.heygen_voice_id, name: defaultVoice.name });
+      } else if (savedList.length > 0 && !selectedVoiceRecord && !hgList.length) {
+        // No ready voice yet and nothing else to show — leave selection empty
+        // rather than pointing at a voice that isn't usable for video generation.
+      } else if (hgList.length > 0 && !selectedVoice && savedList.length === 0) {
         setSelectedVoice(hgList[0]);
       }
 
       if (savedList.length === 0) {
         setActiveTab('heygen');
+      } else {
+        setActiveTab('saved');
       }
     } catch (err) {
       console.error(err);
@@ -65,6 +81,11 @@ export const VoiceSelector = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVoiceReady = (readyVoice) => {
+    setShowUploadModal(false);
+    fetchVoicesData(readyVoice.id);
   };
 
   const handlePlayAudio = (previewUrl, vId) => {
@@ -135,33 +156,29 @@ export const VoiceSelector = () => {
         step={3}
         icon={Volume2}
         title="Choose a voice"
-        description={`Pick a saved voice for ${currentDoctor?.doctor_name || 'this doctor'}, or browse the AI voice library.`}
+        description={`Pick a saved voice for ${currentDoctor?.doctor_name || 'this doctor'}, or browse the voice library.`}
       />
 
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <span>{error}</span>
-        </div>
+      {error && <AlertBanner>{error}</AlertBanner>}
+
+      {showUploadModal && currentDoctor && (
+        <UploadDoctorVoiceModal
+          doctorId={currentDoctor.id}
+          doctorName={currentDoctor.doctor_name}
+          onClose={() => setShowUploadModal(false)}
+          onReady={handleVoiceReady}
+        />
       )}
 
-      {/* Info Notice for Voice Cloning */}
-      <div className="p-3.5 rounded-xl bg-[#F5F7F8] border border-[#E5E7EB] text-[#6B7280] text-xs flex flex-wrap items-center justify-between gap-2">
-        <span>Custom voice cloning isn't available on this account yet.</span>
-        <span className="px-2.5 py-1 rounded bg-white text-[#374151] border border-[#E5E7EB] font-medium">
-          Standard voice library active
-        </span>
-      </div>
-
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap justify-between items-center gap-3 border-b border-[#E5E7EB] pb-4">
-        <div className="flex space-x-1.5 bg-[#F5F7F8] p-1.5 rounded-2xl">
+      <div className="flex flex-wrap justify-between items-center gap-3 border-b border-line pb-4">
+        <div className="flex gap-1 bg-surface-sunken p-1 rounded-xl">
           {savedVoices.length > 0 && (
             <button
               type="button"
               onClick={() => setActiveTab('saved')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === 'saved' ? 'bg-[#005570] text-white shadow-xs' : 'text-[#6B7280] hover:text-[#1F2937]'
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                activeTab === 'saved' ? 'bg-surface text-signal shadow-panel' : 'text-ink-muted hover:text-ink'
               }`}
             >
               <BookmarkCheck className="w-4 h-4" />
@@ -171,8 +188,8 @@ export const VoiceSelector = () => {
           <button
             type="button"
             onClick={() => setActiveTab('heygen')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'heygen' ? 'bg-[#005570] text-white shadow-xs' : 'text-[#6B7280] hover:text-[#1F2937]'
+            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              activeTab === 'heygen' ? 'bg-surface text-signal shadow-panel' : 'text-ink-muted hover:text-ink'
             }`}
           >
             <Volume2 className="w-4 h-4" />
@@ -180,63 +197,97 @@ export const VoiceSelector = () => {
           </button>
         </div>
 
-        {selectedVoice && (
-          <div className="text-xs text-[#6B7280] flex items-center gap-2">
-            <span>Selected:</span>
-            <strong className="text-[#005570] font-bold">{selectedVoice.name || selectedVoice.voice_id}</strong>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {selectedVoice && (
+            <div className="text-xs text-ink-muted flex items-center gap-2">
+              <span>Selected:</span>
+              <strong className="text-signal font-semibold">{selectedVoice.name || selectedVoice.voice_id}</strong>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowUploadModal(true)}
+            disabled={!currentDoctor}
+            className="px-3.5 py-2 rounded-xl bg-signal hover:bg-signal-strong text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-60"
+          >
+            <UploadCloud className="w-3.5 h-3.5" />
+            <span>Upload doctor voice</span>
+          </button>
+        </div>
       </div>
 
       {/* Tab 1: Saved Doctor Voices */}
       {activeTab === 'saved' && (
         <div className="space-y-4">
           {savedVoices.length === 0 ? (
-            <div className="p-8 text-center bg-white border border-[#E5E7EB] rounded-2xl text-[#6B7280]">
-              <p className="text-sm">No saved voices for this doctor yet. Browse the voice library tab to save one.</p>
+            <div className="p-8 text-center bg-surface border border-line rounded-2xl text-ink-muted space-y-3">
+              <p className="text-sm">No voice has been added for this doctor.</p>
+              <button
+                type="button"
+                onClick={() => setShowUploadModal(true)}
+                className="px-4 py-2 rounded-xl bg-signal hover:bg-signal-strong text-white text-xs font-semibold inline-flex items-center gap-2"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Upload doctor voice</span>
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {savedVoices.map((v) => {
-                const isSel = selectedVoiceRecord?.id === v.id || selectedVoice?.voice_id === v.heygen_voice_id;
+                const isReady = !v.clone_status || v.clone_status === 'ready';
+                const isSel = isReady && (selectedVoiceRecord?.id === v.id || selectedVoice?.voice_id === v.heygen_voice_id);
                 const isPlay = playingVoiceId === v.id;
+                const previewUrl = v.source_preview_url || v.preview_url;
                 return (
                   <button
                     type="button"
                     key={v.id}
+                    disabled={!isReady}
                     onClick={() => {
+                      if (!isReady) return;
                       setSelectedVoiceRecord(v);
                       setSelectedVoice({ voice_id: v.heygen_voice_id, name: v.name });
                     }}
                     className={`text-left p-4 rounded-2xl border transition-all ${
                       isSel
-                        ? 'border-[#005570] bg-[#E6F3F7] shadow-sm'
-                        : 'border-[#E5E7EB] bg-white hover:border-[#007799]/50'
+                        ? 'border-signal bg-signal-soft shadow-panel'
+                        : isReady
+                        ? 'border-line bg-surface hover:border-accent/50'
+                        : 'border-line bg-surface-sunken opacity-80 cursor-not-allowed'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <h4 className="font-bold text-[#1F2937] text-sm truncate">{v.name}</h4>
-                        <p className="text-[11px] text-[#6B7280] mt-0.5">{v.language} • {v.gender || 'neutral'}</p>
+                        <h4 className="font-semibold text-ink text-sm truncate">{v.name}</h4>
+                        <p className="text-[11px] text-ink-muted mt-0.5">{v.language || 'English'} · {v.gender || 'neutral'}</p>
+                        {v.clone_status === 'pending' || v.clone_status === 'cloning' ? (
+                          <span className="inline-flex mt-1.5">
+                            <Badge variant="warning" icon={Clock} pulse>Creating voice…</Badge>
+                          </span>
+                        ) : v.clone_status === 'failed' ? (
+                          <span className="inline-flex mt-1.5">
+                            <Badge variant="danger" icon={XCircle}>Voice failed</Badge>
+                          </span>
+                        ) : null}
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {v.preview_url && (
+                        {previewUrl && (
                           <span
                             role="button"
                             tabIndex={0}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handlePlayAudio(v.preview_url, v.id);
+                              handlePlayAudio(previewUrl, v.id);
                             }}
                             className={`p-2 rounded-xl transition-all cursor-pointer ${
-                              isPlay ? 'bg-[#005570] text-white' : 'bg-[#F5F7F8] text-[#005570] hover:bg-[#E6F3F7]'
+                              isPlay ? 'bg-signal text-white' : 'bg-surface-sunken text-signal hover:bg-signal-soft'
                             }`}
                           >
                             {isPlay ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                           </span>
                         )}
-                        {isSel && <CheckCircle2 className="w-5 h-5 text-[#005570]" />}
+                        {isSel && <CheckCircle2 className="w-5 h-5 text-signal" />}
                       </div>
                     </div>
                   </button>
@@ -253,20 +304,20 @@ export const VoiceSelector = () => {
           {/* Filters */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="relative">
-              <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3.5 top-3.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-ink-muted absolute left-3.5 top-3.5 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search voice name…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#E5E7EB] text-[#1F2937] text-sm focus:outline-hidden focus:border-[#007799]"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface border border-line text-ink text-sm focus:outline-hidden focus:border-accent"
               />
             </div>
 
             <select
               value={genderFilter}
               onChange={(e) => setGenderFilter(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-white border border-[#E5E7EB] text-[#374151] text-sm focus:outline-hidden focus:border-[#007799]"
+              className="w-full px-4 py-2.5 rounded-xl bg-surface border border-line text-ink-soft text-sm focus:outline-hidden focus:border-accent"
             >
               <option value="all">All genders</option>
               <option value="female">Female</option>
@@ -276,7 +327,7 @@ export const VoiceSelector = () => {
             <select
               value={languageFilter}
               onChange={(e) => setLanguageFilter(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-white border border-[#E5E7EB] text-[#374151] text-sm focus:outline-hidden focus:border-[#007799]"
+              className="w-full px-4 py-2.5 rounded-xl bg-surface border border-line text-ink-soft text-sm focus:outline-hidden focus:border-accent"
             >
               <option value="all">All languages</option>
               <option value="english">English</option>
@@ -287,8 +338,8 @@ export const VoiceSelector = () => {
 
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 text-[#005570] animate-spin mb-3" />
-              <p className="text-[#6B7280] text-sm">Loading voices…</p>
+              <Loader2 className="w-8 h-8 text-signal animate-spin mb-3" />
+              <p className="text-ink-muted text-sm">Loading voices…</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto pr-1">
@@ -301,18 +352,18 @@ export const VoiceSelector = () => {
                     onClick={() => setSelectedVoice(v)}
                     className={`cursor-pointer p-4 rounded-2xl border transition-all ${
                       isSelected
-                        ? 'border-[#005570] bg-[#E6F3F7] shadow-sm'
-                        : 'border-[#E5E7EB] bg-white hover:border-[#007799]/50'
+                        ? 'border-signal bg-signal-soft shadow-panel'
+                        : 'border-line bg-surface hover:border-accent/50'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <h4 className="font-bold text-[#1F2937] text-sm truncate">{v.name || v.voice_id}</h4>
+                        <h4 className="font-semibold text-ink text-sm truncate">{v.name || v.voice_id}</h4>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-[#F5F7F8] text-[#374151] font-medium border border-[#E5E7EB]">
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-surface-sunken text-ink-soft font-medium border border-line">
                             {v.gender || 'neutral'}
                           </span>
-                          <span className="text-[10px] text-[#6B7280]">{v.language || 'English'}</span>
+                          <span className="text-[10px] text-ink-muted">{v.language || 'English'}</span>
                         </div>
                       </div>
 
@@ -325,18 +376,18 @@ export const VoiceSelector = () => {
                               handlePlayAudio(v.preview_audio, v.voice_id);
                             }}
                             className={`p-2 rounded-xl transition-all ${
-                              isPlaying ? 'bg-[#005570] text-white' : 'bg-[#F5F7F8] text-[#005570] hover:bg-[#E6F3F7]'
+                              isPlaying ? 'bg-signal text-white' : 'bg-surface-sunken text-signal hover:bg-signal-soft'
                             }`}
                           >
                             {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                           </button>
                         )}
-                        {isSelected && <CheckCircle2 className="w-5 h-5 text-[#005570]" />}
+                        {isSelected && <CheckCircle2 className="w-5 h-5 text-signal" />}
                       </div>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t border-[#F5F7F8] flex items-center justify-between">
-                      <span className="text-[10px] text-[#9CA3AF] truncate max-w-[120px]">{v.language || 'English'} voice</span>
+                    <div className="mt-3 pt-3 border-t border-line flex items-center justify-between">
+                      <span className="text-[10px] text-ink-muted truncate max-w-[120px]">{v.language || 'English'} voice</span>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -344,7 +395,7 @@ export const VoiceSelector = () => {
                           handleSaveVoiceForDoctor(v);
                         }}
                         disabled={savingVoice}
-                        className="px-2.5 py-1 rounded-lg bg-[#005570] hover:bg-[#004055] text-white text-[10px] font-bold flex items-center gap-1 disabled:opacity-60"
+                        className="px-2.5 py-1 rounded-lg bg-signal hover:bg-signal-strong text-white text-[10px] font-semibold flex items-center gap-1 disabled:opacity-60"
                       >
                         <Save className="w-3 h-3" />
                         <span>Save voice</span>
@@ -360,9 +411,9 @@ export const VoiceSelector = () => {
 
       <WizardFooter
         onBack={() => setActiveStep(2)}
-        backLabel="Back to Avatar"
+        backLabel="Back to avatar"
         onNext={() => setActiveStep(4)}
-        nextLabel="Continue to Script"
+        nextLabel="Continue to script"
         nextDisabled={!selectedVoice}
       />
     </div>

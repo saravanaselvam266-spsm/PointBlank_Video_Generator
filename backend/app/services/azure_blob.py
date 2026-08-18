@@ -92,15 +92,28 @@ class AzureBlobService:
         blob_name: str,
         data: bytes,
         content_type: Optional[str] = None,
-        overwrite: bool = True
+        overwrite: bool = True,
+        cache_control: Optional[str] = None
     ) -> str:
-        """Uploads raw bytes to `blob_name`. Returns the resulting blob URL."""
-        content_settings = ContentSettings(content_type=content_type) if content_type else None
+        """
+        Uploads raw bytes to `blob_name`. Returns the resulting blob URL.
+
+        cache_control is an HTTP response header Azure returns on every GET —
+        including ones made through a SAS URL — so the browser can cache the
+        actual media bytes for immutable content (final avatar, original
+        voice, completed video, QR). It has no effect on the SAS URL's own
+        validity/expiry, which is controlled separately by generate_read_sas_url/
+        generate_download_sas_url.
+        """
+        content_settings = (
+            ContentSettings(content_type=content_type, cache_control=cache_control)
+            if (content_type or cache_control) else None
+        )
         blob_client = self.get_blob_client(blob_name)
         blob_client.upload_blob(data, overwrite=overwrite, content_settings=content_settings)
         logger.info(
             f"Uploaded blob '{blob_name}' ({len(data)} bytes, "
-            f"content_type={content_type or 'application/octet-stream'})"
+            f"content_type={content_type or 'application/octet-stream'}, cache_control={cache_control or 'none'})"
         )
         return blob_client.url
 
@@ -110,13 +123,17 @@ class AzureBlobService:
         stream: BinaryIO,
         content_type: Optional[str] = None,
         overwrite: bool = True,
-        length: Optional[int] = None
+        length: Optional[int] = None,
+        cache_control: Optional[str] = None
     ) -> str:
         """Uploads a file-like stream to `blob_name`. Returns the resulting blob URL."""
-        content_settings = ContentSettings(content_type=content_type) if content_type else None
+        content_settings = (
+            ContentSettings(content_type=content_type, cache_control=cache_control)
+            if (content_type or cache_control) else None
+        )
         blob_client = self.get_blob_client(blob_name)
         blob_client.upload_blob(stream, overwrite=overwrite, content_settings=content_settings, length=length)
-        logger.info(f"Uploaded blob stream '{blob_name}' (content_type={content_type or 'application/octet-stream'})")
+        logger.info(f"Uploaded blob stream '{blob_name}' (content_type={content_type or 'application/octet-stream'}, cache_control={cache_control or 'none'})")
         return blob_client.url
 
     def download_blob(self, blob_name: str) -> bytes:

@@ -183,6 +183,32 @@ class TestGenericBlobOperations:
         _, kwargs = fake_blob_client.upload_blob.call_args
         assert kwargs["content_settings"] is None
 
+    def test_upload_bytes_passes_cache_control_for_immutable_media(self, monkeypatch):
+        """Immutable assets (final avatar, original voice, completed video, QR)
+        set Cache-Control so the browser can reuse an already-fetched SAS URL
+        without re-downloading the bytes from Azure."""
+        _configure(monkeypatch)
+        service = AzureBlobService()
+        fake_blob_client = MagicMock()
+        with patch.object(AzureBlobService, "get_blob_client", return_value=fake_blob_client):
+            service.upload_bytes(
+                "videos/PB-DOC-000001/PB-VID-000001.mp4", b"data",
+                content_type="video/mp4", cache_control="private, max-age=31536000, immutable"
+            )
+        _, kwargs = fake_blob_client.upload_blob.call_args
+        assert kwargs["content_settings"].content_type == "video/mp4"
+        assert kwargs["content_settings"].cache_control == "private, max-age=31536000, immutable"
+
+    def test_upload_bytes_cache_control_alone_still_builds_content_settings(self, monkeypatch):
+        """cache_control must be honored even without an explicit content_type."""
+        _configure(monkeypatch)
+        service = AzureBlobService()
+        fake_blob_client = MagicMock()
+        with patch.object(AzureBlobService, "get_blob_client", return_value=fake_blob_client):
+            service.upload_bytes("misc/x.bin", b"data", cache_control="private, max-age=60")
+        _, kwargs = fake_blob_client.upload_blob.call_args
+        assert kwargs["content_settings"].cache_control == "private, max-age=60"
+
     def test_upload_stream_passes_content_type_and_length(self, monkeypatch):
         _configure(monkeypatch)
         service = AzureBlobService()

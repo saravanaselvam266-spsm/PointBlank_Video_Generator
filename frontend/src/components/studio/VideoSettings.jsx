@@ -9,11 +9,12 @@ const ASPECT_RATIOS = [
   { id: '1:1', label: 'Square', desc: 'Instagram and LinkedIn feed posts', icon: Square },
 ];
 
+// Curated to the PointBlank palette rather than arbitrary hex values.
 const BACKGROUNDS = [
-  { id: '#0F172A', label: 'Dark Slate' },
-  { id: '#FAFAFA', label: 'Clean White' },
-  { id: '#0D9488', label: 'Medical Teal' },
-  { id: '#1E293B', label: 'Slate Grey' }
+  { id: '#FFFFFF', label: 'White' },
+  { id: '#F4F5F7', label: 'Soft gray' },
+  { id: '#0D3A52', label: 'Signal petrol' },
+  { id: '#14181C', label: 'Charcoal' },
 ];
 
 export const VideoSettings = () => {
@@ -30,7 +31,7 @@ export const VideoSettings = () => {
 
       {/* Aspect Ratio Selector */}
       <div>
-        <label className="block text-xs font-bold text-[#6B7280] uppercase tracking-wider mb-3">
+        <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wider mb-3">
           Video shape
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -44,16 +45,16 @@ export const VideoSettings = () => {
                 onClick={() => setSettings({ ...settings, aspect_ratio: ar.id })}
                 className={`p-4 rounded-2xl border text-left transition-all ${
                   isSelected
-                    ? 'border-[#005570] bg-[#E6F3F7] shadow-sm'
-                    : 'border-[#E5E7EB] hover:border-[#007799]/40 bg-[#F5F7F8] hover:bg-white'
+                    ? 'border-signal bg-signal-soft shadow-panel'
+                    : 'border-line hover:border-accent/40 bg-surface-sunken hover:bg-surface'
                 }`}
               >
                 <div className="flex items-center gap-3 mb-1.5">
-                  <Icon className={`w-5 h-5 ${isSelected ? 'text-[#005570]' : 'text-[#9CA3AF]'}`} />
-                  <span className="font-bold text-[#1F2937] text-sm">{ar.label}</span>
-                  <span className="text-[10px] font-mono text-[#9CA3AF] ml-auto">{ar.id}</span>
+                  <Icon className={`w-5 h-5 ${isSelected ? 'text-signal' : 'text-ink-muted'}`} strokeWidth={1.75} />
+                  <span className="font-semibold text-ink text-sm">{ar.label}</span>
+                  <span className="text-[10px] font-mono text-ink-muted ml-auto">{ar.id}</span>
                 </div>
-                <p className="text-[11px] text-[#6B7280]">{ar.desc}</p>
+                <p className="text-[11px] text-ink-muted">{ar.desc}</p>
               </button>
             );
           })}
@@ -63,12 +64,12 @@ export const VideoSettings = () => {
       {/* Captions & Background Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
         {/* Captions Toggle */}
-        <div className="flex items-center justify-between p-4 rounded-2xl bg-[#F5F7F8] border border-[#E5E7EB]">
+        <div className="flex items-center justify-between p-4 rounded-2xl bg-surface-sunken border border-line">
           <div className="flex items-center gap-3">
-            <Subtitles className="w-5 h-5 text-[#005570]" />
+            <Subtitles className="w-5 h-5 text-signal" strokeWidth={1.75} />
             <div>
-              <span className="font-bold text-[#1F2937] text-sm block">Captions</span>
-              <span className="text-xs text-[#6B7280]">Show subtitles on the video</span>
+              <span className="font-semibold text-ink text-sm block">Captions</span>
+              <span className="text-xs text-ink-muted">Show subtitles on the video</span>
             </div>
           </div>
           <button
@@ -77,7 +78,7 @@ export const VideoSettings = () => {
             aria-checked={settings.captions}
             onClick={() => setSettings({ ...settings, captions: !settings.captions })}
             className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${
-              settings.captions ? 'bg-[#005570]' : 'bg-[#D1D5DB]'
+              settings.captions ? 'bg-signal' : 'bg-line-strong'
             }`}
           >
             <span
@@ -89,19 +90,19 @@ export const VideoSettings = () => {
         </div>
 
         {/* Background Color Picker */}
-        <div className="p-4 rounded-2xl bg-[#F5F7F8] border border-[#E5E7EB]">
+        <div className="p-4 rounded-2xl bg-surface-sunken border border-line">
           <div className="flex items-center gap-3 mb-3">
-            <Palette className="w-5 h-5 text-[#005570]" />
-            <span className="font-bold text-[#1F2937] text-sm">Background</span>
+            <Palette className="w-5 h-5 text-signal" strokeWidth={1.75} />
+            <span className="font-semibold text-ink text-sm">Background</span>
           </div>
           <div className="flex gap-3">
             {BACKGROUNDS.map((bg) => (
               <button
                 key={bg.id}
                 type="button"
-                onClick={() => setSettings({ ...settings, background_color: bg.id })}
+                onClick={() => setSettings({ ...settings, background_value: bg.id })}
                 className={`w-8 h-8 rounded-full border-2 transition-all ${
-                  settings.background_color === bg.id ? 'border-[#005570] scale-110 shadow-sm' : 'border-[#E5E7EB] hover:border-[#9CA3AF]'
+                  settings.background_value === bg.id ? 'border-signal scale-110 shadow-sm' : 'border-line hover:border-ink-muted'
                 }`}
                 style={{ backgroundColor: bg.id }}
                 title={bg.label}

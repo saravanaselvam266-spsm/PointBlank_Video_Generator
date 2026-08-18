@@ -1,67 +1,189 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+/*
+  PointBlank design system — "Editorial Healthcare Studio"
+
+  Type roles:
+    --font-display  Manrope     — headings/hero moments, used app-wide (not just Dashboard)
+    --font-sans     Public Sans — UI text, body copy, controls
+    --font-mono     IBM Plex Mono — PB-XXX-000000 codes, timestamps, technical metadata
+
+  Color roles: a clean white/neutral-gray surface system (no cream/beige —
+  removed per explicit design direction) built around a deepened, more
+  professional PointBlank petrol-blue signal color. Every component already
+  consumes these as semantic tokens (bg-surface, border-line, text-signal,
+  etc.), so this palette shift is a token-level change only — no component
+  file needed to change for the redesign to take effect everywhere.
+*/
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
-:root {
-  --pb-background: #FAFAFA;
-  --pb-surface: #FFFFFF;
-  --pb-surface-secondary: #F5F5F5;
-  --pb-text-primary: #1F2937;
-  --pb-text-secondary: #6B7280;
-  --pb-border: #E5E7EB;
-  --pb-brand: #005570;
-  --pb-brand-hover: #004055;
-  --pb-brand-accent: #007799;
-  --pb-brand-tint: #E6F3F7;
-  --pb-focus: #0284C7;
-  --pb-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --pb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+@theme {
+  /* --- Type --- */
+  --font-display: 'Manrope', 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* --- Color: white/neutral-gray surfaces (no cream) --- */
+  --color-paper: #FFFFFF;
+  --color-paper-deep: #F3F4F6;
+  --color-surface: #FFFFFF;
+  --color-surface-sunken: #F4F5F7;
+
+  /* --- Color: ink (neutral, professional — not warm) --- */
+  --color-ink: #14181C;
+  --color-ink-soft: #4B5563;
+  --color-ink-muted: #6B7280;
+
+  /* --- Color: hairlines (neutral gray) --- */
+  --color-line: #E4E7EB;
+  --color-line-strong: #CBD2D9;
+
+  /* --- Color: signal (deep PointBlank petrol-blue — darker, less saturated
+     than before, used intentionally for CTAs/active states/links only) --- */
+  --color-signal: #0D3A52;
+  --color-signal-strong: #082638;
+  --color-signal-soft: #E9EFF3;
+  --color-accent: #1B5A78;
+
+  /* --- Color: semantic --- */
+  --color-success: #1E7A52;
+  --color-success-soft: #E7F5EE;
+  --color-warning: #A8661F;
+  --color-warning-soft: #FCF3E4;
+  --color-error: #AA3A31;
+  --color-error-soft: #F9EBE9;
+
+  /* --- Shadow: one neutral elevation + one signature colored CTA shadow --- */
+  --shadow-panel: 0 1px 2px rgba(20, 24, 28, 0.04), 0 8px 24px -12px rgba(20, 24, 28, 0.08);
+  --shadow-cta: 0 10px 24px -8px rgba(8, 38, 56, 0.35);
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: var(--pb-background);
-    color: var(--pb-text-primary);
+    background-color: var(--color-paper);
+    color: var(--color-ink);
     overflow-x: hidden;
     margin: 0;
     padding: 0;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Outfit', 'Inter', sans-serif;
-    color: var(--pb-text-primary);
+    font-family: var(--font-display);
+    color: var(--color-ink);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: var(--color-signal-soft);
+    color: var(--color-signal-strong);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
-/* Custom Light Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* --- Atmosphere: a barely-there top glow on a white surface, never a loud gradient --- */
+.pb-atmosphere {
+  position: relative;
+  background-color: var(--color-paper);
+  background-image:
+    radial-gradient(1200px 480px at 12% -8%, rgba(13, 58, 82, 0.05), transparent 60%);
+  background-attachment: fixed;
 }
 
-::-webkit-scrollbar-track {
-  background: #F1F5F9;
-}
+/* --- Custom light scrollbar (warm, matches palette) --- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-paper-deep); }
+::-webkit-scrollbar-thumb { background: var(--color-line-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-signal); }
 
-::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #005570;
-}
-
-/* Card Utility */
+/* --- Card primitive --- */
 .pb-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-panel);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.pb-card-hover:hover {
+  border-color: var(--color-accent);
+  box-shadow: 0 4px 16px rgba(13, 58, 82, 0.10);
 }
 
-.pb-card-hover:hover {
-  border-color: #007799;
-  box-shadow: 0 4px 12px rgba(0, 85, 112, 0.08);
+/*
+  Signature device: the "slate tag" — every PB-XXX-000000 identifier in the
+  product is real production/take metadata (doctor, avatar, voice, video are
+  each independently sequenced). Styling it consistently as a film/broadcast
+  slate chip turns already-real data into the app's signature visual motif,
+  rather than adding decorative numbering that doesn't mean anything.
+*/
+.pb-slate-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--color-signal-strong);
+  background: var(--color-signal-soft);
+  border: 1px solid rgba(8, 38, 56, 0.16);
+  border-radius: 0.375rem;
+  padding: 0.1875rem 0.5rem;
+}
+.pb-slate-tag::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+/* Hairline production-rule divider — a restrained nod to timecode/waveform rulers */
+.pb-rule {
+  height: 1px;
+  background-image: repeating-linear-gradient(90deg, var(--color-line-strong) 0, var(--color-line-strong) 5px, transparent 5px, transparent 10px);
+}
+
+/* --- Motion: one orchestrated entrance, not scattered effects --- */
+@keyframes pb-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pb-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pb-scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.pb-reveal {
+  animation: pb-fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--pb-i, 0) * 70ms);
+}
+.pb-reveal-in {
+  animation: pb-fade-in 0.4s ease both;
+  animation-delay: calc(var(--pb-i, 0) * 60ms);
+}
+.pb-pop-in {
+  animation: pb-scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-reveal, .pb-reveal-in, .pb-pop-in, .pb-card {
+    animation: none !important;
+    transition: none !important;
+  }
+  html { scroll-behavior: auto; }
 }

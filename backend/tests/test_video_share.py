@@ -1,8 +1,11 @@
 """
 Covers app/routers/videos.py::_ensure_public_share — the get-or-create QR/
 public-share flow. Reuses the existing qr_service and PublicVideoShare model
-(no duplicate sharing system). QR PNG bytes are mirrored to Azure Blob
-Storage; qr_image keeps a small base64 fallback of the SAME bytes.
+(no duplicate sharing system). QR PNG bytes are uploaded to Azure Blob
+Storage, which is the ONLY store for the QR image bytes — qr_image is never
+populated for new shares (Azure is the source of truth, not a base64
+fallback in Postgres). If Azure upload fails, the share still exists with
+qr_blob_name=None and a subsequent call retries the SAME upload.
 
 Scope: no real Postgres, no real Azure — db is a MagicMock, azure_blob_service
 and qr_service are patched. get_next_pb_id is patched to avoid touching a
@@ -61,7 +64,7 @@ class TestCreatesNewShareWhenNoneExists:
         assert share.qr_id == "PB-QR-000001"
         assert share.public_token == "tok123"
         assert share.qr_blob_name == "qr/PB-DOC-000001/PB-VID-000001.png"
-        assert share.qr_image.startswith("data:image/png;base64,")
+        assert share.qr_image is None
         db.add.assert_called_once()
         db.commit.assert_called()
 
@@ -78,8 +81,8 @@ class TestCreatesNewShareWhenNoneExists:
 
         assert share.public_url == "https://watch.pointblank.example/watch/secure-tok"
 
-    def test_azure_upload_failure_still_creates_share_with_base64_fallback(self):
-        """QR Azure mirroring is best-effort — a failure must not block the share/token from existing."""
+    def test_azure_upload_failure_still_creates_share_without_storing_qr_bytes_in_postgres(self):
+        """QR Azure upload is best-effort — a failure must not block the share/token from existing, and must NOT fall back to storing QR bytes in Postgres."""
         video = FakeVideo()
         db = _db_with_no_existing_share()
 
@@ -90,8 +93,33 @@ class TestCreatesNewShareWhenNoneExists:
                         share = _ensure_public_share(video, db)
 
         assert share.qr_blob_name is None
-        assert share.qr_image.startswith("data:image/png;base64,")
+        assert share.qr_image is None
         assert share.public_token == "tok"
+
+    def test_retries_azure_upload_on_existing_share_missing_qr_blob(self):
+        """A previously-failed QR upload retries against the SAME share row/public_token, never creating a duplicate share."""
+        video = FakeVideo()
+        existing_share = PublicVideoShare(
+            qr_id="PB-QR-000004",
+            video_id=video.id,
+            doctor_id=video.doctor_id,
+            public_token="tok",
+            public_url="https://watch.pointblank.example/watch/tok",
+            qr_image=None,
+            qr_blob_name=None,
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = existing_share
+
+        with patch("app.routers.videos.qr_service.generate_qr_png_bytes", return_value=b"png-bytes"):
+            with patch("app.routers.videos.azure_blob_service.upload_bytes") as mock_upload:
+                share = _ensure_public_share(video, db)
+
+        mock_upload.assert_called_once()
+        assert share is existing_share
+        assert share.qr_blob_name == "qr/PB-DOC-000001/PB-VID-000001.png"
+        assert share.qr_image is None
+        db.add.assert_not_called()
 
     def test_raises_value_error_when_video_not_completed(self):
         video = FakeVideo(status="PROCESSING")

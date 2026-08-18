@@ -170,6 +170,13 @@ class AvatarScenario(Base):
     heygen_preview_image_url = Column(Text, nullable=True)
     creation_status = Column(String(50), default="DRAFT", nullable=False, index=True) # 'DRAFT', 'BASE_CREATING', 'BASE_READY', 'LOOK_SUBMITTED', 'LOOK_PROCESSING', 'READY', 'FAILED', 'DELETED'
     creation_error = Column(Text, nullable=True)
+    # Ground-truth provider existence, distinct from creation_status: a scenario
+    # can be READY (our own creation pipeline finished) yet the provider avatar
+    # group has since been deleted/expired on HeyGen's side. Set to 'unavailable'
+    # only when a real video-generation attempt's pre-check confirms the
+    # provider no longer recognizes the avatar (never checked speculatively —
+    # keeps the Avatar Library list fast). 'unknown' until first checked.
+    provider_status = Column(String(20), nullable=False, default="unknown") # 'unknown', 'available', 'unavailable'
 
     # Azure Blob mirror of the FINAL generated avatar image (the actual asset
     # shown in the Avatar Library), e.g. avatars/PB-DOC-000001/PB-AVT-000001/final.png.
@@ -203,7 +210,11 @@ class Voice(Base):
     name = Column(String(255), nullable=False) # e.g., "Dr. Saravana Professional Voice"
     voice_type = Column(String(50), nullable=False, default="ai_voice") # 'ai_voice', 'cloned', 'uploaded'
     
-    heygen_voice_id = Column(String(255), nullable=False, index=True)
+    # Nullable: a voice awaiting/undergoing real cloning has no provider voice
+    # id yet (see clone_status below). Populated with the HeyGen voice_clone_id
+    # returned by POST /v3/voices/clone as soon as the job is submitted, and
+    # remains the provider voice_id used for video generation once ready.
+    heygen_voice_id = Column(String(255), nullable=True, index=True)
     language = Column(String(100), nullable=True)
     gender = Column(String(50), nullable=True)
     accent = Column(String(100), nullable=True)
@@ -212,10 +223,25 @@ class Voice(Base):
     is_deleted = Column(Boolean, default=False, nullable=False, index=True)
 
     # Azure Blob mirror of the voice preview audio, e.g.
-    # voices/PB-DOC-000001/PB-VCE-000001/preview.mp3. Storage-only — no
-    # voice-cloning provider integration exists in this codebase today.
+    # voices/PB-DOC-000001/PB-VCE-000001/preview.mp3.
     azure_blob_name = Column(Text, nullable=True)
     voice_storage_status = Column(String(50), default="pending", nullable=False) # pending, uploading, uploaded, failed
+
+    # Doctor Original Voice cloning (real HeyGen POST /v3/voices/clone workflow).
+    # Azure Blob mirror of the doctor's ORIGINAL uploaded recording (distinct
+    # from azure_blob_name/preview_url above, which mirror a provider-hosted
+    # preview sample), e.g. voices/PB-DOC-000001/PB-VCE-000001/original.wav.
+    source_audio_blob_name = Column(Text, nullable=True)
+    original_filename = Column(String(255), nullable=True)
+    source_content_type = Column(String(100), nullable=True)
+    # pending -> cloning -> ready | failed. Defaults to 'ready' for voices
+    # saved directly from the existing HeyGen catalog (POST /voices), which
+    # already have a real heygen_voice_id at creation time and were never
+    # cloned from a doctor recording.
+    clone_status = Column(String(20), nullable=False, default="ready")
+    clone_failure_reason = Column(Text, nullable=True)
+    # Auto-selected in Create Video when a doctor has multiple ready voices.
+    is_default = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
@@ -247,12 +273,17 @@ class Video(Base):
     status = Column(String(50), default="PENDING", index=True) # PENDING, PROCESSING, COMPLETED, FAILED
     
     video_url = Column(Text, nullable=True) # HeyGen CDN URL
-    thumbnail_url = Column(Text, nullable=True)
+    thumbnail_url = Column(Text, nullable=True) # HeyGen CDN thumbnail URL — expires 24-48h, kept only as a fallback
     storage_key = Column(Text, nullable=True) # Permanent PointBlank Storage Key
     azure_blob_name = Column(Text, nullable=True) # Azure Blob path, e.g. videos/PB-DOC-000001/PB-VID-000001.mp4
+    # Azure Blob mirror of the poster/thumbnail image, e.g.
+    # videos/PB-DOC-000001/PB-VID-000001/thumbnail.jpg — durable + SAS-delivered,
+    # unlike thumbnail_url above which points at HeyGen's own expiring CDN.
+    azure_thumbnail_blob_name = Column(Text, nullable=True)
     storage_status = Column(String(50), default="pending", index=True) # pending, uploading, uploaded, failed
     error_message = Column(Text, nullable=True)
-    
+    is_deleted = Column(Boolean, default=False, nullable=False, index=True)
+
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -272,7 +303,10 @@ class PublicVideoShare(Base):
     
     public_token = Column(String(64), unique=True, nullable=False, index=True) # Secure 256-bit Token
     public_url = Column(Text, nullable=False) # http://localhost:5250/watch/<public_token>
-    qr_image = Column(Text, nullable=False) # Base64 Data URI fallback (small, always populated)
+    # Legacy base64 Data URI fallback. Nullable — new shares never write QR
+    # binary data into PostgreSQL, Azure Blob (qr_blob_name) is the sole store.
+    # Only rows created before this change may have a non-null value here.
+    qr_image = Column(Text, nullable=True)
     qr_blob_name = Column(Text, nullable=True) # Azure Blob path, e.g. qr/PB-DOC-000001/PB-VID-000001.png — primary serving path once uploaded
 
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

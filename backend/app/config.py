@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     AZURE_STORAGE_ENDPOINT_SUFFIX: str = "core.windows.net"
     AZURE_STORAGE_CONTAINER_NAME: str = ""
 
+    # Azure OpenAI (script generation — see app/services/azure_openai_service.py).
+    # Auth is Microsoft Entra ID via DefaultAzureCredential, not an API key —
+    # there is no AZURE_OPENAI_API_KEY setting by design.
+    AZURE_OPENAI_ENDPOINT: str = ""
+    AZURE_OPENAI_DEPLOYMENT_NAME: str = ""
+    AZURE_OPENAI_API_VERSION: str = "2024-12-01-preview"
+
     # Initial Admin Setup (Loaded safely from .env)
     INITIAL_ADMIN_EMAIL: str = "admin@pointblank.co.in"
     INITIAL_ADMIN_PASSWORD: str = "PointBlank2026Admin!"

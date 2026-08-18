@@ -108,7 +108,8 @@ export const dashboardApi = {
 export const doctorApi = {
   create: (data) => apiClient.post('/doctors', data),
   list: () => apiClient.get('/doctors'),
-  get: (id) => apiClient.get(`/doctors/${id}`)
+  get: (id) => apiClient.get(`/doctors/${id}`),
+  getProfile: (id) => apiClient.get(`/doctors/${id}/profile`)
 };
 
 export const avatarLookApi = {
@@ -140,7 +141,12 @@ export const voiceApi = {
   create: (data) => apiClient.post('/voices', data),
   list: (doctorId) => apiClient.get('/voices', { params: { doctor_id: doctorId } }),
   get: (id) => apiClient.get(`/voices/${id}`),
-  delete: (id) => apiClient.delete(`/voices/${id}`)
+  delete: (id) => apiClient.delete(`/voices/${id}`),
+  uploadAndClone: (formData) => apiClient.post('/voices/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  getCloneStatus: (id) => apiClient.get(`/voices/${id}/clone-status`),
+  retryClone: (id) => apiClient.post(`/voices/${id}/retry`)
 };
 
 export const heyGenApi = {
@@ -153,6 +159,13 @@ export const heyGenApi = {
   })
 };
 
+export const scriptApi = {
+  fromDocument: (formData) => apiClient.post('/videos/script/from-document', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  generate: (data) => apiClient.post('/videos/script/generate', data)
+};
+
 export const videoApi = {
   generate: (data) => apiClient.post('/videos/generate', data),
   getStatus: (id) => apiClient.get(`/videos/${id}/status`),
@@ -160,7 +173,8 @@ export const videoApi = {
   get: (id) => apiClient.get(`/videos/${id}`),
   getDownloadUrl: (id) => apiClient.get(`/videos/${id}/download`),
   retryStorage: (id) => apiClient.post(`/videos/${id}/storage/retry`),
-  getShareInfo: (id) => apiClient.get(`/videos/${id}/share`)
+  getShareInfo: (id) => apiClient.get(`/videos/${id}/share`),
+  delete: (id) => apiClient.delete(`/videos/${id}`)
 };
 
 export const publicApi = {

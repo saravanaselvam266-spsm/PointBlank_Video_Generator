@@ -1,4 +1,3 @@
-import base64
 import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,7 +12,14 @@ from app.dependencies.auth import get_current_user
 from app.services.heygen_service import heygen_service
 from app.services.azure_blob import azure_blob_service
 from app.services.qr_service import qr_service
-from app.services.media_resolve import resolve_video_playback_url, resolve_qr_image
+from app.services.media_resolve import (
+    resolve_video_playback_url,
+    resolve_qr_image,
+    resolve_video_thumbnail_url,
+    resolve_video_download_url,
+    mirror_video_thumbnail_to_azure,
+    IMMUTABLE_CACHE_CONTROL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +39,7 @@ def _apply_video_response_extras(res: VideoResponse, video: Video) -> VideoRespo
     if video.saved_voice:
         res.voice_name = video.saved_voice.name
     res.video_url = resolve_video_playback_url(video)
+    res.thumbnail_url = resolve_video_thumbnail_url(video)
     return res
 
 
@@ -40,30 +47,28 @@ def _ensure_public_share(video: Video, db: Session) -> PublicVideoShare:
     """
     Get-or-create the public share (token + QR) for a COMPLETED video. Reuses
     the existing PublicVideoShare model and qr_service — no duplicate sharing
-    system. The QR PNG is mirrored to Azure Blob Storage at
-    qr/{doctor_id}/{video_id}.png; qr_image keeps a small base64 fallback of
-    the SAME bytes for resilience, never a second QR render.
+    system. The QR PNG is uploaded to Azure Blob Storage at
+    qr/{doctor_id}/{video_id}.png, which is the ONLY store for the QR image
+    bytes — qr_image is never populated for new shares (legacy rows created
+    before this change may still carry a base64 fallback; those are left
+    untouched, not backfilled).
+
+    If a share row already exists but its QR was never successfully uploaded
+    to Azure (e.g. the first attempt failed), this retries the same upload
+    against the SAME row/public_token rather than creating a duplicate share
+    — the public URL must stay stable once handed out.
     """
     existing = db.query(PublicVideoShare).filter(PublicVideoShare.video_id == video.id).first()
     if existing:
+        if not existing.qr_blob_name:
+            _try_upload_qr_to_azure(existing, video, db)
         return existing
 
     if video.status != "COMPLETED":
         raise ValueError("Cannot create a public share before the video has completed.")
 
-    doctor_business_id = video.doctor.doctor_id if video.doctor else video.doctor_id
     public_token = qr_service.generate_public_token()
     public_url = f"{settings.PUBLIC_BASE_URL}/watch/{public_token}"
-    png_bytes = qr_service.generate_qr_png_bytes(public_url)
-    qr_image_fallback = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('utf-8')}"
-
-    qr_blob_name = None
-    try:
-        blob_name = f"qr/{doctor_business_id}/{video.video_id}.png"
-        azure_blob_service.upload_bytes(blob_name, png_bytes, content_type="image/png")
-        qr_blob_name = blob_name
-    except Exception as exc:
-        logger.warning(f"QR Azure mirror failed for video {video.video_id}: {exc}")
 
     pb_qr_id = get_next_pb_id(db, 'pb_qr_id_seq', 'PB-QR')
     share = PublicVideoShare(
@@ -72,14 +77,31 @@ def _ensure_public_share(video: Video, db: Session) -> PublicVideoShare:
         doctor_id=video.doctor_id,
         public_token=public_token,
         public_url=public_url,
-        qr_image=qr_image_fallback,
-        qr_blob_name=qr_blob_name
+        qr_image=None,
+        qr_blob_name=None
     )
     db.add(share)
     db.commit()
     db.refresh(share)
-    logger.info(f"Public share created for video {video.video_id}: qr_id={pb_qr_id}, qr_blob_name={qr_blob_name or 'none (base64 fallback only)'}")
+
+    _try_upload_qr_to_azure(share, video, db)
+
+    logger.info(f"Public share created for video {video.video_id}: qr_id={pb_qr_id}, qr_blob_name={share.qr_blob_name or 'none (Azure upload pending/failed — will retry on next access)'}")
     return share
+
+
+def _try_upload_qr_to_azure(share: PublicVideoShare, video: Video, db: Session) -> None:
+    """Best-effort QR PNG upload to Azure for an existing share row. Never writes QR bytes to PostgreSQL."""
+    try:
+        doctor_business_id = video.doctor.doctor_id if video.doctor else video.doctor_id
+        png_bytes = qr_service.generate_qr_png_bytes(share.public_url)
+        blob_name = f"qr/{doctor_business_id}/{video.video_id}.png"
+        azure_blob_service.upload_bytes(blob_name, png_bytes, content_type="image/png", cache_control=IMMUTABLE_CACHE_CONTROL)
+        share.qr_blob_name = blob_name
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning(f"QR Azure upload failed for share {share.qr_id}: {exc}")
 
 
 async def _store_completed_video_in_azure(video: Video, db: Session) -> None:
@@ -115,7 +137,7 @@ async def _store_completed_video_in_azure(video: Video, db: Session) -> None:
                 raise RuntimeError(f"Failed to download completed video from HeyGen CDN ({res.status_code}).")
             video_bytes = res.content
 
-        azure_blob_service.upload_bytes(blob_name, video_bytes, content_type="video/mp4")
+        azure_blob_service.upload_bytes(blob_name, video_bytes, content_type="video/mp4", cache_control=IMMUTABLE_CACHE_CONTROL)
 
         video.azure_blob_name = blob_name
         video.storage_status = "uploaded"
@@ -125,6 +147,66 @@ async def _store_completed_video_in_azure(video: Video, db: Session) -> None:
         video.storage_status = "failed"
         db.commit()
         raise
+
+async def _check_avatar_provider_availability(target_heygen_id: str, is_photo: bool) -> bool:
+    """
+    Ground-truth existence check for the selected avatar, run immediately
+    before submitting a video-generation job.
+
+    Self-created Photo Avatar "looks" (avatar_type == 'photo') are validated
+    via GET /v3/avatars/looks/{id} (falling back to GET /v3/avatars/{id}) —
+    the SAME dedicated single-resource endpoint HeyGen itself uses during
+    creation-status polling. This is authoritative and immune to any
+    pagination/listing gaps a general catalog fetch could have: HeyGen's
+    account-wide GET /v3/avatars listing was observed returning only ~20
+    entries, nowhere near exhaustive for self-created looks, which made the
+    previous membership-in-list check unreliable for this avatar type.
+
+    Public Studio avatars/talking photos have no equivalent per-ID lookup, so
+    they're checked by membership in the general public catalog instead,
+    which IS exhaustive for that resource type (confirmed ~1200+ avatars,
+    ~7500+ talking photos returned in full).
+    """
+    if is_photo:
+        try:
+            await heygen_service.get_avatar_look_status(target_heygen_id)
+            return True
+        except Exception as exc:
+            logger.warning(f"Avatar provider availability check failed for photo avatar '{target_heygen_id}': {exc}")
+            return False
+
+    available_avatar_ids = set()
+    try:
+        v2_dict = await heygen_service.get_avatars()
+        if isinstance(v2_dict, dict):
+            for av in v2_dict.get("avatars", []):
+                if av.get("avatar_id"):
+                    available_avatar_ids.add(av["avatar_id"])
+            for tp in v2_dict.get("talking_photos", []):
+                if tp.get("talking_photo_id"):
+                    available_avatar_ids.add(tp["talking_photo_id"])
+
+        try:
+            v3_list = await heygen_service.get_avatars_v3()
+            if isinstance(v3_list, list):
+                for av in v3_list:
+                    if av.get("id"):
+                        available_avatar_ids.add(av["id"])
+                    if av.get("avatar_id"):
+                        available_avatar_ids.add(av["avatar_id"])
+        except Exception:
+            pass
+    except Exception as fetch_err:
+        logger.warning(f"Failed to fetch live public avatar catalog: {fetch_err}")
+        # Can't verify — fail open rather than block generation on our own fetch failure.
+        return True
+
+    if not available_avatar_ids:
+        # Fetch nominally succeeded but returned nothing usable — same "can't verify" fail-open.
+        return True
+
+    return target_heygen_id in available_avatar_ids
+
 
 # Default Avatar IV motion instruction for PointBlank's healthcare Photo Avatars.
 # Only applied to the avatar_iv engine (Photo Avatars) — never to Studio (v2) avatars.
@@ -181,6 +263,16 @@ async def generate_video(
             raise HTTPException(status_code=403, detail="Access denied to Voice record.")
         if target_voice.doctor_id != doctor.id:
             raise HTTPException(status_code=400, detail="Voice record does not belong to the selected Doctor.")
+        if target_voice.clone_status and target_voice.clone_status != "ready":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This doctor's voice is still being created. Please wait until it's ready or choose another voice."
+            )
+        if not target_voice.heygen_voice_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This voice does not have a usable voice ID yet. Please wait until it's ready or choose another voice."
+            )
 
     # 3. Resolve exact stored HeyGen resource identifiers (NEVER transformed or hardcoded)
     if target_scenario:
@@ -240,37 +332,21 @@ async def generate_video(
     # avatars keep the v2 engine unless explicitly overridden via settings.engine.
     engine_name = resolved_settings.get("engine", "avatar_iv" if is_photo else "v2")
 
-    # 4. Pre-validate HeyGen ID against live catalog before sending
-    available_avatar_ids = set()
-    try:
-        v2_dict = await heygen_service.get_avatars()
-        if isinstance(v2_dict, dict):
-            for av in v2_dict.get("avatars", []):
-                if av.get("avatar_id"):
-                    available_avatar_ids.add(av["avatar_id"])
-            for tp in v2_dict.get("talking_photos", []):
-                if tp.get("talking_photo_id"):
-                    available_avatar_ids.add(tp["talking_photo_id"])
-        
-        try:
-            v3_list = await heygen_service.get_avatars_v3()
-            if isinstance(v3_list, list):
-                for av in v3_list:
-                    if av.get("id"):
-                        available_avatar_ids.add(av["id"])
-                    if av.get("avatar_id"):
-                        available_avatar_ids.add(av["avatar_id"])
-        except Exception:
-            pass
-    except Exception as fetch_err:
-        logger.warning(f"Failed to fetch live catalog for pre-validation: {fetch_err}")
-
-    if available_avatar_ids and target_heygen_id not in available_avatar_ids:
-        logger.warning(f"Avatar validation failed: ID '{target_heygen_id}' not in live catalog.")
+    # 4. Pre-validate the selected avatar still exists at the provider (ground-truth
+    # per-resource check for photo avatars, catalog-membership for public avatars).
+    avatar_available = await _check_avatar_provider_availability(target_heygen_id, is_photo)
+    if not avatar_available:
+        logger.warning(f"Avatar validation failed: ID '{target_heygen_id}' not found at provider.")
+        if target_scenario:
+            target_scenario.provider_status = "unavailable"
+            db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Selected HeyGen avatar is no longer available. Refresh the Avatar Library and select another avatar."
         )
+    elif target_scenario and target_scenario.provider_status != "available":
+        target_scenario.provider_status = "available"
+        db.commit()
 
     # 5. Create Video record in PENDING state
     pb_video_id = get_next_pb_id(db, 'pb_video_id_seq', 'PB-VID')
@@ -387,7 +463,7 @@ async def get_video_status(
     """
     Poll HeyGen for current video status. Updates DB record on completion/failure.
     """
-    video = db.query(Video).filter(Video.id == id).first()
+    video = db.query(Video).filter(Video.id == id, Video.is_deleted == False).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video record not found.")
 
@@ -416,6 +492,17 @@ async def get_video_status(
                         await _store_completed_video_in_azure(video, db)
                     except Exception as st_err:
                         logger.warning(f"Azure storage failed for video {id}: {st_err}")
+                    db.refresh(video)
+
+                # Mirror the poster/thumbnail image too — HeyGen's thumbnail_url
+                # expires on the same 24-48h window as video_url, so without this
+                # the Video Library grid would show a broken image shortly after
+                # generation. Best-effort: never blocks the COMPLETED status.
+                if video.thumbnail_url:
+                    try:
+                        await mirror_video_thumbnail_to_azure(video, video.thumbnail_url, db)
+                    except Exception as thumb_err:
+                        logger.warning(f"Video thumbnail Azure mirror failed for {id}: {thumb_err}")
                     db.refresh(video)
 
                 # Also create the public share (token + QR, mirrored to Azure)
@@ -451,7 +538,7 @@ async def retry_video_storage(
     blob already exists, this just re-confirms the DB reference rather than
     re-uploading.
     """
-    video = db.query(Video).filter(Video.id == id).first()
+    video = db.query(Video).filter(Video.id == id, Video.is_deleted == False).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video record not found.")
 
@@ -486,7 +573,7 @@ async def get_video_download_url(
     can download/stream it directly from Azure — the backend never proxies the
     file bytes itself, and the Azure AccountKey is never exposed to the client.
     """
-    video = db.query(Video).filter(Video.id == id).first()
+    video = db.query(Video).filter(Video.id == id, Video.is_deleted == False).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video record not found.")
 
@@ -504,10 +591,8 @@ async def get_video_download_url(
             detail="Video is still being stored. Please try again shortly."
         )
 
-    try:
-        download_url = azure_blob_service.generate_download_sas_url(video.azure_blob_name)
-    except Exception as exc:
-        logger.error(f"Azure SAS URL generation failed for video {id}: {exc}")
+    download_url = resolve_video_download_url(video)
+    if not download_url:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Unable to generate a download link for the stored video. Please try again."
@@ -529,7 +614,7 @@ def get_video_share(
     the link can open. Ownership is checked here; the public route trusts the
     256-bit token instead.
     """
-    video = db.query(Video).filter(Video.id == id).first()
+    video = db.query(Video).filter(Video.id == id, Video.is_deleted == False).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video record not found.")
 
@@ -555,8 +640,8 @@ def list_videos(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List all videos for the authenticated user (optionally filtered by doctor_id)."""
-    query = db.query(Video)
+    """List all active (non-deleted) videos for the authenticated user (optionally filtered by doctor_id)."""
+    query = db.query(Video).filter(Video.is_deleted == False)
     if current_user.role != "ADMIN":
         query = query.filter(Video.user_id == current_user.id)
 
@@ -576,7 +661,7 @@ def get_video_details(
     current_user: User = Depends(get_current_user)
 ):
     """Get full details for a single video record."""
-    video = db.query(Video).filter(Video.id == id).first()
+    video = db.query(Video).filter(Video.id == id, Video.is_deleted == False).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video record not found.")
 
@@ -585,3 +670,26 @@ def get_video_details(
 
     res = _apply_video_response_extras(VideoResponse.model_validate(video), video)
     return res
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_video(
+    id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Soft delete a video (removes it from the Video Library without touching
+    the underlying Azure blob, HeyGen job history, or any existing public
+    share link that may already be out in the world).
+    """
+    video = db.query(Video).filter(Video.id == id, Video.is_deleted == False).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video record not found.")
+
+    if current_user.role != "ADMIN" and video.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied to video record.")
+
+    video.is_deleted = True
+    db.commit()
+    return None

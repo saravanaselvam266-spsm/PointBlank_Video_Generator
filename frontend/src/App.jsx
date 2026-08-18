@@ -9,9 +9,9 @@ import { AppShell } from './components/layout/AppShell';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Doctors } from './pages/Doctors';
-import { Avatars } from './pages/Avatars';
+import { DoctorProfile } from './pages/DoctorProfile';
+import { AILibrary } from './pages/AILibrary';
 import { CreateAvatar } from './pages/CreateAvatar';
-import { Voices } from './pages/Voices';
 import { CreateVideo } from './pages/CreateVideo';
 import { Videos } from './pages/Videos';
 import { VideoDetails } from './pages/VideoDetails';
@@ -52,8 +52,12 @@ export default function App() {
               <Route index element={<Navigate to="/app/dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="doctors" element={<Doctors />} />
-              <Route path="avatars" element={<Avatars />} />
-              <Route path="voices" element={<Voices />} />
+              <Route path="doctors/:id" element={<DoctorProfile />} />
+              <Route path="ai-library" element={<AILibrary />} />
+              {/* Legacy Avatar/Voice Library links now redirect into AI Library — doctor-specific
+                  avatars/voices moved to Doctor Profile, avoiding two pages managing the same assets. */}
+              <Route path="avatars" element={<Navigate to="/app/ai-library" replace />} />
+              <Route path="voices" element={<Navigate to="/app/ai-library" replace />} />
               <Route path="create-avatar" element={<CreateAvatar />} />
               <Route path="create-video" element={<CreateVideo />} />
               <Route path="videos" element={<Videos />} />

@@ -15,7 +15,7 @@ export const AppProvider = ({ children }) => {
     aspect_ratio: "16:9",
     captions: false,
     background_type: "color",
-    background_value: "#FAFAFA",
+    background_value: "#FFFFFF",
     speed: 1.0
   });
 

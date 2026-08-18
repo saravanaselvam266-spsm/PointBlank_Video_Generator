@@ -17,12 +17,12 @@ def get_dashboard_summary(
         doctor_count = db.query(DoctorProfile).count()
         scenario_count = db.query(AvatarScenario).filter(AvatarScenario.is_deleted == False).count()
         voice_count = db.query(Voice).filter(Voice.is_deleted == False).count()
-        video_query = db.query(Video)
+        video_query = db.query(Video).filter(Video.is_deleted == False)
     else:
         doctor_count = db.query(DoctorProfile).filter(DoctorProfile.user_id == current_user.id).count()
         scenario_count = db.query(AvatarScenario).filter(AvatarScenario.user_id == current_user.id, AvatarScenario.is_deleted == False).count()
         voice_count = db.query(Voice).filter(Voice.user_id == current_user.id, Voice.is_deleted == False).count()
-        video_query = db.query(Video).filter(Video.user_id == current_user.id)
+        video_query = db.query(Video).filter(Video.user_id == current_user.id, Video.is_deleted == False)
 
     total_videos = video_query.count()
     processing_videos = video_query.filter(Video.status.in_(["PENDING", "PROCESSING"])).count()

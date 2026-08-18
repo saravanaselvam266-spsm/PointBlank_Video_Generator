@@ -71,3 +71,18 @@ def extension_for_content_type(content_type: Optional[str], fallback: str = "bin
     if not content_type:
         return fallback
     return _EXTENSION_BY_TYPE.get(content_type, fallback)
+
+
+# HeyGen's voice cloning asset upload (POST /v3/assets) only documents mp3/wav
+# support — narrower than the general sniff_audio_content_type() formats above
+# (which also recognizes ogg/m4a for other playback-only use cases). A doctor's
+# original voice recording must be restricted to what the real cloning API
+# actually accepts, never a format we merely hope it accepts.
+ALLOWED_VOICE_CLONE_CONTENT_TYPES = {"audio/mpeg", "audio/wav"}
+MAX_VOICE_CLONE_UPLOAD_BYTES = 32 * 1024 * 1024  # HeyGen /v3/assets documented limit
+MIN_VOICE_CLONE_UPLOAD_BYTES = 1000  # reject empty/near-empty files before ever calling HeyGen
+
+
+def is_clonable_audio_content_type(content_type: Optional[str]) -> bool:
+    """True only for the audio formats HeyGen's voice cloning pipeline actually accepts."""
+    return content_type in ALLOWED_VOICE_CLONE_CONTENT_TYPES

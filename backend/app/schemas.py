@@ -172,6 +172,7 @@ class AvatarScenarioResponse(BaseModel):
     heygen_preview_image_url: Optional[str] = None
     creation_status: str = "DRAFT"
     creation_error: Optional[str] = None
+    provider_status: str = "unknown"  # 'unknown', 'available', 'unavailable' — ground-truth from the last video-generation pre-check
     metadata_json: Optional[Dict[str, Any]] = None
     is_deleted: bool = False
     created_at: datetime
@@ -182,6 +183,10 @@ class AvatarScenarioResponse(BaseModel):
     azure_preview_blob_name: Optional[str] = None
     original_photo_azure_blob_name: Optional[str] = None
     avatar_storage_status: str = "pending"
+    # Short-lived Azure SAS for the small library-grid thumbnail (falls back to
+    # the full-resolution image server-side if no thumbnail was generated).
+    # Use this in library grids instead of photo_url to avoid loading full-size images.
+    thumbnail_url: Optional[str] = None
 
 
     class Config:
@@ -207,7 +212,7 @@ class VoiceResponse(BaseModel):
     doctor_id: str
     name: str
     voice_type: str
-    heygen_voice_id: str
+    heygen_voice_id: Optional[str] = None
     language: Optional[str] = None
     gender: Optional[str] = None
     accent: Optional[str] = None
@@ -219,6 +224,12 @@ class VoiceResponse(BaseModel):
     doctor_name: Optional[str] = None
     azure_blob_name: Optional[str] = None
     voice_storage_status: str = "pending"
+
+    # Doctor Original Voice cloning (safe, non-provider-identifying fields).
+    clone_status: str = "ready"  # pending, cloning, ready, failed
+    clone_failure_reason: Optional[str] = None
+    is_default: bool = False
+    source_preview_url: Optional[str] = None  # short-lived Azure SAS for the original recording
 
     class Config:
         from_attributes = True
@@ -256,6 +267,7 @@ class VideoResponse(BaseModel):
     azure_blob_name: Optional[str] = None
     storage_status: Optional[str] = "pending"
     error_message: Optional[str] = None
+    is_deleted: bool = False
     created_at: datetime
     completed_at: Optional[datetime] = None
     doctor_name: Optional[str] = None
@@ -264,6 +276,31 @@ class VideoResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class DoctorProfileResponse(BaseModel):
+    """
+    Combined Doctor Profile view: doctor metadata + their avatars, voices, and
+    most recent videos in a single response — avoids the frontend making one
+    request per doctor per media type (or worse, per doctor in a list).
+    """
+    doctor: DoctorResponse
+    avatars: List[AvatarScenarioResponse]
+    voices: List[VoiceResponse]
+    recent_videos: List[VideoResponse]
+
+
+# --- SCRIPT GENERATION SCHEMAS ---
+class ScriptGenerateRequest(BaseModel):
+    scenario: str
+    tone: Optional[str] = "professional"  # 'professional', 'friendly', 'educational'
+    length: Optional[str] = "medium"  # 'short', 'medium', 'long'
+    language: Optional[str] = "English"
+
+
+class ScriptResponse(BaseModel):
+    script: str
+    source_type: str  # 'document', 'ai'
+
 
 # --- DASHBOARD SCHEMAS ---
 class DashboardSummaryResponse(BaseModel):

@@ -149,6 +149,121 @@ class HeyGenService:
                 "raw_response": res_data
             }
 
+    async def upload_audio_asset(self, file_bytes: bytes, filename: str, content_type: str) -> Dict[str, Any]:
+        """
+        Uploads audio bytes to HeyGen's current asset service via POST /v3/assets
+        (multipart/form-data, field "file"). This is the prerequisite step for
+        voice cloning's audio.asset_id input — distinct from upload_asset_bytes(),
+        which targets the older upload.heygen.com/v1/asset raw-bytes endpoint used
+        for avatar photos. Per official docs: max 32MB, mp3/wav/png/jpeg/mp4/webm/pdf.
+        """
+        url = f"{self.base_url}/v3/assets"
+        headers = self._get_headers(content_type=None)
+        files = {"file": (filename, file_bytes, content_type)}
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(url, headers=headers, files=files)
+            if response.status_code not in (200, 201):
+                logger.error(f"HeyGen audio asset upload failed with HTTP {response.status_code}: {response.text}")
+                raise RuntimeError(f"HeyGen Asset Upload Failed ({response.status_code}): {response.text}")
+
+            res_json = response.json()
+            data = res_json.get("data", res_json)
+            asset_id = data.get("asset_id") or data.get("id")
+            if not asset_id:
+                raise RuntimeError(f"HeyGen audio asset upload response missing asset_id: {res_json}")
+
+            return {
+                "asset_id": asset_id,
+                "url": data.get("url"),
+                "mime_type": data.get("mime_type"),
+                "size_bytes": data.get("size_bytes"),
+            }
+
+    async def clone_voice(
+        self,
+        asset_id: str,
+        voice_name: str,
+        language: Optional[str] = None,
+        remove_background_noise: bool = True
+    ) -> str:
+        """
+        Submits a real voice-cloning job via the official documented endpoint
+        POST /v3/voices/clone. Returns HeyGen's voice_clone_id — this becomes the
+        real provider voice_id, pollable via GET /v3/voices/{voice_clone_id} until
+        status == "complete". Never invents a request schema: this exact payload
+        shape (audio.type/asset_id, voice_name, language, remove_background_noise)
+        is the documented HeyGen v3 Clone a Voice request.
+        """
+        url = f"{self.base_url}/v3/voices/clone"
+        headers = self._get_headers()
+
+        payload: Dict[str, Any] = {
+            "audio": {"type": "asset_id", "asset_id": asset_id},
+            "voice_name": voice_name,
+            "remove_background_noise": remove_background_noise,
+        }
+        if language:
+            payload["language"] = language
+
+        logger.info(f"Submitting HeyGen POST /v3/voices/clone: voice_name='{voice_name}', asset_id={asset_id}")
+
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+
+            if response.status_code == 402:
+                logger.error("HeyGen API HTTP 402: Insufficient credits for voice cloning.")
+                raise RuntimeError("INSUFFICIENT_CREDITS: HeyGen API account has insufficient credits for voice cloning.")
+            if response.status_code in (401, 403):
+                logger.error(f"HeyGen API HTTP {response.status_code}: Voice cloning not authorized: {response.text}")
+                raise RuntimeError(f"VOICE_CLONE_FORBIDDEN: HeyGen account is not authorized for voice cloning ({response.status_code}): {response.text}")
+            if response.status_code not in (200, 201):
+                logger.error(f"HeyGen clone_voice failed with HTTP {response.status_code}: {response.text}")
+                raise RuntimeError(f"HeyGen Voice Clone API Error ({response.status_code}): {response.text}")
+
+            res_json = response.json()
+            data = res_json.get("data", res_json)
+            voice_clone_id = data.get("voice_clone_id")
+            if not voice_clone_id:
+                raise RuntimeError(f"HeyGen voice clone response missing voice_clone_id: {res_json}")
+
+            logger.info(f"HeyGen Voice Clone Job Submitted Successfully! voice_clone_id={voice_clone_id}")
+            return voice_clone_id
+
+    async def get_voice_clone_status(self, voice_id: str) -> Dict[str, Any]:
+        """
+        Polls a submitted voice clone job via the official documented endpoint
+        GET /v3/voices/{voice_id} until status is 'complete' (ready to use as a
+        TTS voice_id in POST /v3/videos) or 'failed'.
+        """
+        url = f"{self.base_url}/v3/voices/{voice_id}"
+        headers = self._get_headers()
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"HeyGen get_voice_clone_status failed for {voice_id} with HTTP {response.status_code}: {response.text}")
+                raise RuntimeError(f"HeyGen Voice Clone Status Error ({response.status_code}): {response.text}")
+
+            res_json = response.json()
+            data = res_json.get("data", res_json)
+            raw_status = str(data.get("status") or "processing").lower()
+
+            if raw_status in ("complete", "completed", "ready", "success"):
+                status_norm = "complete"
+            elif raw_status in ("failed", "error"):
+                status_norm = "failed"
+            else:
+                status_norm = "processing"
+
+            return {
+                "voice_id": data.get("voice_id", voice_id),
+                "status": status_norm,
+                "raw_status": raw_status,
+                "failure_message": data.get("failure_message"),
+                "preview_audio_url": data.get("preview_audio_url"),
+            }
+
     async def create_base_photo_avatar(self, photo_url: str, name: Optional[str] = None) -> Dict[str, Any]:
         """
         Step A: Creates a Base Photo Avatar on HeyGen via POST /v3/avatars.

@@ -4,15 +4,17 @@ import { videoApi } from '../../api/client';
 import { User, UserCheck, Volume2, FileText, Sparkles, AlertCircle, Image as ImageIcon } from 'lucide-react';
 import { StepHeader } from '../ui/StepHeader';
 import { WizardFooter } from '../ui/WizardFooter';
+import { AlertBanner } from '../ui/AlertBanner';
+import { SlateTag } from '../ui/SlateTag';
 
 const ReviewCard = ({ icon: Icon, label, children, isMissing, missingLabel }) => (
-  <div className="p-5 rounded-2xl bg-white border border-[#E5E7EB]">
-    <span className="text-xs font-bold text-[#005570] uppercase tracking-wider mb-3 flex items-center gap-2">
+  <div className="p-5 rounded-2xl bg-surface border border-line">
+    <span className="text-xs font-semibold text-signal uppercase tracking-wider mb-3 flex items-center gap-2">
       <Icon className="w-4 h-4" />
       <span>{label}</span>
     </span>
     {isMissing ? (
-      <p className="text-xs text-amber-700 font-medium flex items-center gap-1.5">
+      <p className="text-xs text-warning font-medium flex items-center gap-1.5">
         <AlertCircle className="w-3.5 h-3.5" />
         {missingLabel}
       </p>
@@ -95,12 +97,7 @@ export const ConfigPreview = () => {
         description="Double-check the doctor, avatar, voice, and script below. You can still go back and change anything."
       />
 
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <AlertBanner>{error}</AlertBanner>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Left Column: Doctor & Avatar */}
@@ -108,15 +105,13 @@ export const ConfigPreview = () => {
           <ReviewCard icon={User} label="Doctor" isMissing={!currentDoctor} missingLabel="No doctor selected">
             {currentDoctor && (
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-[#005570] text-white flex items-center justify-center font-bold text-lg shrink-0">
+                <div className="w-12 h-12 rounded-xl bg-signal text-white flex items-center justify-center font-semibold text-lg shrink-0">
                   {currentDoctor.doctor_name.charAt(0)}
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-bold text-[#1F2937] text-base truncate">{currentDoctor.doctor_name}</h4>
-                  <p className="text-xs text-[#6B7280] truncate">{currentDoctor.specialization}</p>
-                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-[#E6F3F7] text-[#005570] border border-[#007799]/20">
-                    {currentDoctor.doctor_id}
-                  </span>
+                  <h4 className="font-semibold text-ink text-base truncate">{currentDoctor.doctor_name}</h4>
+                  <p className="text-xs text-ink-muted truncate">{currentDoctor.specialization}</p>
+                  <SlateTag className="mt-1">{currentDoctor.doctor_id}</SlateTag>
                 </div>
               </div>
             )}
@@ -133,20 +128,20 @@ export const ConfigPreview = () => {
                 <img
                   src={selectedScenario?.photo_url || selectedAvatar?.preview_image_url}
                   alt={selectedScenario?.name || selectedAvatar?.name}
-                  className="w-20 h-20 rounded-xl object-cover border border-[#E5E7EB] shrink-0"
+                  className="w-20 h-20 rounded-xl object-cover border border-line shrink-0"
                   onError={(e) => { e.target.style.display = 'none'; }}
                 />
               ) : (
-                <div className="w-20 h-20 rounded-xl bg-[#E6F3F7] border border-[#007799]/20 flex items-center justify-center shrink-0">
-                  <ImageIcon className="w-8 h-8 text-[#005570]" />
+                <div className="w-20 h-20 rounded-xl bg-signal-soft border border-signal/15 flex items-center justify-center shrink-0">
+                  <ImageIcon className="w-8 h-8 text-signal" />
                 </div>
               )}
               <div className="min-w-0">
-                <h4 className="font-bold text-[#1F2937] text-sm truncate">{selectedScenario?.name || selectedAvatar?.name}</h4>
-                <span className="text-xs text-[#6B7280] capitalize block">
+                <h4 className="font-semibold text-ink text-sm truncate">{selectedScenario?.name || selectedAvatar?.name}</h4>
+                <span className="text-xs text-ink-muted capitalize block">
                   Background: {selectedScenario?.background_type || 'Clinic'} ({selectedScenario?.position || 'Center'})
                 </span>
-                <span className="text-[11px] text-[#9CA3AF] block truncate">
+                <span className="text-[11px] text-ink-muted/80 block truncate">
                   Format: {selectedScenario?.aspect_ratio || settings.aspect_ratio}
                 </span>
               </div>
@@ -163,27 +158,27 @@ export const ConfigPreview = () => {
             missingLabel="No voice selected"
           >
             <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-[#6B7280]">
+              <div className="flex justify-between text-ink-muted">
                 <span>Voice:</span>
-                <strong className="text-[#1F2937]">{selectedVoiceRecord?.name || selectedVoice?.name || selectedVoice?.voice_id}</strong>
+                <strong className="text-ink">{selectedVoiceRecord?.name || selectedVoice?.name || selectedVoice?.voice_id}</strong>
               </div>
-              <div className="flex justify-between text-[#6B7280]">
+              <div className="flex justify-between text-ink-muted">
                 <span>Format:</span>
-                <strong className="text-[#1F2937]">{selectedScenario?.aspect_ratio || settings.aspect_ratio}</strong>
+                <strong className="text-ink">{selectedScenario?.aspect_ratio || settings.aspect_ratio}</strong>
               </div>
-              <div className="flex justify-between text-[#6B7280]">
+              <div className="flex justify-between text-ink-muted">
                 <span>Captions:</span>
-                <strong className="text-[#1F2937]">{settings.captions ? 'Enabled' : 'Disabled'}</strong>
+                <strong className="text-ink">{settings.captions ? 'Enabled' : 'Disabled'}</strong>
               </div>
-              <div className="flex justify-between text-[#6B7280]">
+              <div className="flex justify-between text-ink-muted">
                 <span>Estimated length:</span>
-                <strong className="text-emerald-700">~{estimatedSeconds} seconds</strong>
+                <strong className="text-success">~{estimatedSeconds} seconds</strong>
               </div>
             </div>
           </ReviewCard>
 
           <ReviewCard icon={FileText} label={`Script (${wordCount} words)`} isMissing={!script.trim()} missingLabel="No script written yet">
-            <p className="text-xs text-[#374151] line-clamp-3 bg-[#F5F7F8] p-3 rounded-xl border border-[#E5E7EB] italic leading-relaxed">
+            <p className="text-xs text-ink-soft line-clamp-3 bg-surface-sunken p-3 rounded-xl border border-line italic leading-relaxed">
               "{script}"
             </p>
           </ReviewCard>
@@ -192,9 +187,9 @@ export const ConfigPreview = () => {
 
       <WizardFooter
         onBack={() => setActiveStep(5)}
-        backLabel="Edit Settings"
+        backLabel="Edit settings"
         onNext={handleGenerateVideo}
-        nextLabel={submitting ? 'Starting Generation…' : 'Generate Video'}
+        nextLabel={submitting ? 'Starting generation…' : 'Generate video'}
         loading={submitting}
       />
     </div>

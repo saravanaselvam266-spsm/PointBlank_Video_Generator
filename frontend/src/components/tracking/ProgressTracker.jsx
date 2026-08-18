@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { videoApi } from '../../api/client';
 import confetti from 'canvas-confetti';
+import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, AlertCircle, Film, Clock, Sparkles } from 'lucide-react';
 
 const STAGES = [
@@ -42,7 +43,8 @@ export const ProgressTracker = ({ onCompleted }) => {
           confetti({
             particleCount: 80,
             spread: 70,
-            origin: { y: 0.6 }
+            origin: { y: 0.6 },
+            colors: ['#0D3A52', '#1B5A78', '#1E7A52']
           });
 
           if (onCompleted) onCompleted(updatedVid);
@@ -75,12 +77,12 @@ export const ProgressTracker = ({ onCompleted }) => {
 
   if (activeVideo.status === 'FAILED') {
     return (
-      <div className="max-w-2xl mx-auto text-center py-6">
-        <div className="w-20 h-20 rounded-full bg-rose-50 text-rose-500 border border-rose-200 mx-auto flex items-center justify-center mb-4">
-          <AlertCircle className="w-10 h-10" />
+      <div className="max-w-2xl mx-auto text-center py-6 pb-reveal">
+        <div className="w-20 h-20 rounded-full bg-error-soft text-error mx-auto flex items-center justify-center mb-4">
+          <AlertCircle className="w-10 h-10" strokeWidth={1.5} />
         </div>
-        <h3 className="text-2xl font-extrabold text-[#1F2937] mb-2">Video generation failed</h3>
-        <p className="text-sm text-rose-700 bg-rose-50 p-4 rounded-2xl border border-rose-200 max-w-md mx-auto">
+        <h3 className="font-display text-2xl text-ink mb-2">Video generation failed</h3>
+        <p className="text-sm text-error bg-error-soft p-4 rounded-2xl max-w-md mx-auto">
           {error || activeVideo.error_message || 'The video could not be generated. Please go back and try again.'}
         </p>
       </div>
@@ -91,12 +93,12 @@ export const ProgressTracker = ({ onCompleted }) => {
   const isDone = activeVideo.status === 'COMPLETED';
 
   return (
-    <div className="max-w-2xl mx-auto py-6">
+    <div className="max-w-2xl mx-auto py-6 pb-reveal">
       <div className="text-center mb-8">
-        <h3 className="text-2xl font-extrabold text-[#1F2937] mb-2">
+        <h3 className="font-display text-2xl text-ink mb-2">
           {isDone ? 'Your video is ready' : 'Generating your video'}
         </h3>
-        <p className="text-sm text-[#6B7280] max-w-md mx-auto">
+        <p className="text-sm text-ink-soft max-w-md mx-auto">
           {isDone
             ? 'Your video has been generated and permanently stored.'
             : "This usually takes a few minutes. Feel free to keep this tab open — we'll update automatically."}
@@ -109,23 +111,23 @@ export const ProgressTracker = ({ onCompleted }) => {
           const isCurrent = idx === stageIndex && !isDone;
           const Icon = stage.icon;
           return (
-            <div
+            <motion.div
               key={stage.key}
-              className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
-                isCurrent
-                  ? 'border-[#007799] bg-[#E6F3F7]'
-                  : isComplete
-                  ? 'border-[#E5E7EB] bg-white'
-                  : 'border-[#E5E7EB] bg-[#F5F7F8]'
-              }`}
+              initial={false}
+              animate={{
+                borderColor: isCurrent ? 'var(--color-accent)' : 'var(--color-line)',
+                backgroundColor: isCurrent ? 'var(--color-signal-soft)' : 'var(--color-surface)',
+              }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              className="flex items-center gap-4 p-4 rounded-2xl border"
             >
               <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors duration-500 ${
                   isComplete
-                    ? 'bg-emerald-100 text-emerald-700'
+                    ? 'bg-success-soft text-success'
                     : isCurrent
-                    ? 'bg-[#005570] text-white'
-                    : 'bg-white text-[#9CA3AF] border border-[#E5E7EB]'
+                    ? 'bg-signal text-white'
+                    : 'bg-surface-sunken text-ink-muted'
                 }`}
               >
                 {isComplete ? (
@@ -133,22 +135,22 @@ export const ProgressTracker = ({ onCompleted }) => {
                 ) : isCurrent ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <Icon className="w-5 h-5" />
+                  <Icon className="w-5 h-5" strokeWidth={1.75} />
                 )}
               </div>
               <div className="min-w-0">
-                <p className={`text-sm font-bold ${isCurrent ? 'text-[#005570]' : isComplete ? 'text-[#1F2937]' : 'text-[#9CA3AF]'}`}>
+                <p className={`text-sm font-semibold ${isCurrent ? 'text-signal' : isComplete ? 'text-ink' : 'text-ink-muted'}`}>
                   {stage.label}
                 </p>
-                <p className={`text-xs ${isCurrent ? 'text-[#005570]/80' : 'text-[#6B7280]'}`}>{stage.description}</p>
+                <p className={`text-xs ${isCurrent ? 'text-signal/80' : 'text-ink-muted'}`}>{stage.description}</p>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
 
       {!isDone && (
-        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-[#9CA3AF]">
+        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-ink-muted">
           <Film className="w-3.5 h-3.5" />
           <span>You'll be able to preview, download, and share as soon as it's ready.</span>
         </div>

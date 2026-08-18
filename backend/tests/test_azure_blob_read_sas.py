@@ -7,6 +7,7 @@ test_azure_blob_service.py — no real Azure account contacted.
 """
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -75,3 +76,33 @@ class TestGenerateReadSasUrl:
         with patch.object(AzureBlobService, "get_blob_client", return_value=fake_blob_client):
             url = service.generate_read_sas_url("avatars/x.png")
         assert FAKE_ACCOUNT_KEY not in url
+
+    def test_sas_expires_within_the_requested_window(self, monkeypatch):
+        """The SAS token itself must carry a short-lived expiry — not a permanent grant."""
+        _configure(monkeypatch)
+        service = AzureBlobService()
+        fake_blob_client = MagicMock()
+        fake_blob_client.url = "https://pointblankstorage.blob.core.windows.net/pointblank-files/avatars/x.png"
+        before = datetime.now(timezone.utc)
+        with patch.object(AzureBlobService, "get_blob_client", return_value=fake_blob_client):
+            with patch("app.services.azure_blob.generate_blob_sas", return_value="sv=token") as mock_sas:
+                service.generate_read_sas_url("avatars/x.png", expiry_minutes=15)
+        after = datetime.now(timezone.utc)
+
+        _, kwargs = mock_sas.call_args
+        expiry = kwargs["expiry"]
+        assert before + timedelta(minutes=15) <= expiry <= after + timedelta(minutes=15)
+        # Sanity bound: never accidentally generate a multi-hour/permanent grant for a 15-minute request.
+        assert expiry < after + timedelta(minutes=16)
+
+    def test_longer_lived_default_still_expires_within_an_hour(self, monkeypatch):
+        _configure(monkeypatch)
+        service = AzureBlobService()
+        fake_blob_client = MagicMock()
+        fake_blob_client.url = "https://pointblankstorage.blob.core.windows.net/pointblank-files/voices/x.mp3"
+        after = datetime.now(timezone.utc)
+        with patch.object(AzureBlobService, "get_blob_client", return_value=fake_blob_client):
+            with patch("app.services.azure_blob.generate_blob_sas", return_value="sv=token") as mock_sas:
+                service.generate_read_sas_url("voices/x.mp3")  # default expiry_minutes=60
+        _, kwargs = mock_sas.call_args
+        assert kwargs["expiry"] < after + timedelta(minutes=61)

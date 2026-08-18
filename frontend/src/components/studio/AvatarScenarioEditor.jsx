@@ -5,7 +5,6 @@ import { avatarScenarioApi } from '../../api/client';
 import {
   CheckCircle2,
   AlertCircle,
-  Loader2,
   PlusCircle,
   ImageIcon,
   UserRound
@@ -13,6 +12,8 @@ import {
 import { StepHeader } from '../ui/StepHeader';
 import { EmptyState } from '../ui/EmptyState';
 import { WizardFooter } from '../ui/WizardFooter';
+import { SlateTag } from '../ui/SlateTag';
+import { Badge } from '../ui/Badge';
 
 export const AvatarScenarioEditor = () => {
   const navigate = useNavigate();
@@ -86,9 +87,9 @@ export const AvatarScenarioEditor = () => {
         action={
           <button
             onClick={() => setActiveStep(1)}
-            className="px-6 py-2.5 bg-[#005570] text-white font-bold text-sm rounded-xl hover:bg-[#004055]"
+            className="px-6 py-2.5 bg-signal text-white font-semibold text-sm rounded-xl hover:bg-signal-strong"
           >
-            Go to Step 1: Choose Doctor
+            Go to step 1: choose doctor
           </button>
         }
       />
@@ -105,29 +106,27 @@ export const AvatarScenarioEditor = () => {
       />
 
       {/* Selected Doctor Summary Card */}
-      <div className="p-4 rounded-2xl bg-[#E6F3F7] border border-[#007799]/20 flex items-center justify-between gap-3">
+      <div className="p-4 rounded-2xl bg-signal-soft border border-signal/15 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-[#005570] text-white flex items-center justify-center font-bold text-sm shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-signal text-white flex items-center justify-center font-semibold text-sm shrink-0">
             {currentDoctor.doctor_name.charAt(0)}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-[#005570] uppercase tracking-wider">Active doctor</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white text-[#005570] border border-[#007799]/20">
-                {currentDoctor.doctor_id}
-              </span>
+              <span className="text-[10px] font-semibold text-signal uppercase tracking-wider">Active doctor</span>
+              <SlateTag>{currentDoctor.doctor_id}</SlateTag>
             </div>
-            <h3 className="text-sm font-extrabold text-[#1F2937] truncate">{currentDoctor.doctor_name}</h3>
+            <h3 className="text-sm font-semibold text-ink truncate">{currentDoctor.doctor_name}</h3>
           </div>
         </div>
 
-        <button onClick={() => setActiveStep(1)} className="text-xs font-bold text-[#005570] hover:underline shrink-0">
+        <button onClick={() => setActiveStep(1)} className="text-xs font-semibold text-signal hover:underline shrink-0">
           Change doctor
         </button>
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center gap-2">
+        <div className="p-4 rounded-xl bg-error-soft border border-error/25 text-error text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -135,30 +134,37 @@ export const AvatarScenarioEditor = () => {
 
       {/* Avatars Grid */}
       {loading ? (
-        <div className="py-16 text-center text-[#6B7280] flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#005570]" />
-          <p className="text-sm font-medium">Loading avatars for {currentDoctor.doctor_name}…</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-line bg-surface overflow-hidden animate-pulse">
+              <div className="aspect-3/4 bg-surface-sunken" />
+              <div className="p-4 space-y-2">
+                <div className="h-3 w-2/3 bg-surface-sunken rounded" />
+                <div className="h-2.5 w-1/2 bg-surface-sunken rounded" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : avatars.length === 0 ? (
         <EmptyState
           icon={ImageIcon}
           tone="warning"
           title="No avatars ready for this doctor yet"
-          description={`Create a new AI avatar for ${currentDoctor.doctor_name} to use in this video.`}
+          description={`Create a new avatar for ${currentDoctor.doctor_name} to use in this video.`}
           className="max-w-md mx-auto"
           action={
             <button
               onClick={() => navigate('/app/create-avatar')}
-              className="px-6 py-3 rounded-xl bg-[#005570] hover:bg-[#004055] text-white font-bold text-sm shadow-md shadow-[#005570]/20 inline-flex items-center gap-2"
+              className="px-6 py-3 rounded-xl bg-signal hover:bg-signal-strong text-white font-semibold text-sm shadow-cta inline-flex items-center gap-2"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>Create an Avatar</span>
+              <span>Create an avatar</span>
             </button>
           }
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-          {avatars.map((sc) => {
+          {avatars.map((sc, i) => {
             const isSelected = selectedScenario?.id === sc.id;
             const previewUrl = sc.heygen_preview_image_url || sc.photo_url || sc.original_photo_url;
             return (
@@ -166,12 +172,13 @@ export const AvatarScenarioEditor = () => {
                 type="button"
                 key={sc.id}
                 onClick={() => handleSelectAvatarScenario(sc)}
-                className={`text-left rounded-2xl border p-4 bg-white transition-all flex flex-col justify-between hover:border-[#007799] ${
-                  isSelected ? 'border-[#005570] ring-2 ring-[#005570]/25 shadow-sm' : 'border-[#E5E7EB]'
+                className={`text-left rounded-2xl border p-4 bg-surface transition-all flex flex-col justify-between hover:border-accent/50 pb-reveal ${
+                  isSelected ? 'border-signal ring-2 ring-signal/20 shadow-panel' : 'border-line'
                 }`}
+                style={{ '--pb-i': i }}
               >
                 <div className="space-y-3">
-                  <div className="aspect-3/4 bg-[#F5F7F8] rounded-xl overflow-hidden border border-[#E5E7EB] relative">
+                  <div className="aspect-3/4 bg-surface-sunken rounded-xl overflow-hidden border border-line relative">
                     {previewUrl ? (
                       <img
                         src={previewUrl}
@@ -182,32 +189,32 @@ export const AvatarScenarioEditor = () => {
                       />
                     ) : null}
                     <div
-                      className="items-center justify-center h-full text-[#9CA3AF]"
+                      className="items-center justify-center h-full text-ink-muted"
                       style={{ display: previewUrl ? 'none' : 'flex' }}
                     >
                       <ImageIcon className="w-8 h-8" />
                     </div>
-                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      Ready
-                    </span>
+                    <div className="absolute top-2 right-2">
+                      <Badge variant="success">Ready</Badge>
+                    </div>
                     {isSelected && (
-                      <div className="absolute inset-0 bg-[#005570]/5 flex items-start justify-end p-2">
-                        <CheckCircle2 className="w-6 h-6 text-[#005570] bg-white rounded-full" />
+                      <div className="absolute inset-0 bg-signal/5 flex items-start justify-end p-2">
+                        <CheckCircle2 className="w-6 h-6 text-signal bg-surface rounded-full" />
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-[#1F2937] text-sm truncate">{sc.name}</h4>
-                    <p className="text-[11px] text-[#6B7280] font-mono mt-0.5 truncate">{sc.avatar_scenario_id}</p>
+                    <h4 className="font-semibold text-ink text-sm truncate">{sc.name}</h4>
+                    <SlateTag className="mt-1">{sc.avatar_scenario_id}</SlateTag>
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-[#F5F7F8] flex items-center justify-between">
-                  <span className={`text-xs font-bold ${isSelected ? 'text-[#005570]' : 'text-[#6B7280]'}`}>
+                <div className="mt-4 pt-3 border-t border-line flex items-center justify-between">
+                  <span className={`text-xs font-semibold ${isSelected ? 'text-signal' : 'text-ink-muted'}`}>
                     {isSelected ? 'Selected' : 'Select this avatar'}
                   </span>
-                  <CheckCircle2 className={`w-4 h-4 ${isSelected ? 'text-[#005570]' : 'text-[#D1D5DB]'}`} />
+                  <CheckCircle2 className={`w-4 h-4 ${isSelected ? 'text-signal' : 'text-line-strong'}`} />
                 </div>
               </button>
             );
@@ -217,9 +224,9 @@ export const AvatarScenarioEditor = () => {
 
       <WizardFooter
         onBack={() => setActiveStep(1)}
-        backLabel="Back to Doctor"
+        backLabel="Back to doctor"
         onNext={() => setActiveStep(3)}
-        nextLabel="Continue to Voice"
+        nextLabel="Continue to voice"
         nextDisabled={!selectedScenario}
       />
     </div>

@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import engine
-from app.routers import auth, users, dashboard, doctors, heygen, videos, public, avatar_scenarios, voices, avatar_looks
+from app.routers import auth, users, dashboard, doctors, heygen, videos, public, avatar_scenarios, voices, avatar_looks, script
 from app.scripts.create_admin import create_initial_admin
 from app.scripts.seed_avatar_looks import seed_avatar_looks
 from app.services.azure_blob import azure_blob_service
@@ -69,6 +69,7 @@ app.include_router(avatar_scenarios.router)
 app.include_router(voices.router)
 app.include_router(heygen.router)
 app.include_router(videos.router)
+app.include_router(script.router)
 app.include_router(public.router)
 
 @app.on_event("startup")

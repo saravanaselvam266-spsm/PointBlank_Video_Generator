@@ -89,11 +89,15 @@ class FakeVoice:
 
 
 class FakeVideo:
-    def __init__(self, video_id="PB-VID-000001"):
+    def __init__(self, video_id="PB-VID-000001", doctor_id="PB-DOC-000001"):
         self.video_id = video_id
+        self.doctor = FakeDoctor(doctor_id)
+        self.doctor_id = doctor_id
         self.video_url = "https://heygen.cdn/video.mp4"
         self.azure_blob_name = None
         self.storage_status = "pending"
+        self.thumbnail_url = "https://heygen.cdn/video-thumb.jpg"
+        self.azure_thumbnail_blob_name = None
 
 
 class FakeShare:
@@ -113,20 +117,37 @@ class TestMirrorAvatarPreviewToAzure:
             with patch("app.services.media_resolve.azure_blob_service.upload_bytes") as mock_upload:
                 _run(media_resolve.mirror_avatar_preview_to_azure(scenario, scenario.heygen_preview_image_url, db))
 
-        mock_upload.assert_called_once()
-        args, kwargs = mock_upload.call_args
-        assert args[0] == "avatars/PB-DOC-000001/PB-AVT-000001/final.png"
-        assert args[1] == _REAL_PNG_BYTES
-        assert kwargs["content_type"] == "image/png"
+        # Two uploads now: the full-resolution final image, and a generated thumbnail.
+        assert mock_upload.call_count == 2
+        final_call = mock_upload.call_args_list[0]
+        assert final_call.args[0] == "avatars/PB-DOC-000001/PB-AVT-000001/final.png"
+        assert final_call.args[1] == _REAL_PNG_BYTES
+        assert final_call.kwargs["content_type"] == "image/png"
 
-    def test_sets_both_azure_blob_name_fields_to_the_same_blob(self):
-        """No separate provider-rendered 'final' vs 'preview' asset exists — both
-        fields point at the one mirrored blob, never left blank when upload succeeds."""
+    def test_generates_and_uploads_a_distinct_thumbnail(self):
+        """azure_preview_blob_name now points at a real generated thumbnail, not
+        a duplicate of the full-resolution final image."""
+        scenario = FakeScenario()
+        db = FakeDB()
+        with patch("app.services.media_resolve.httpx.AsyncClient", return_value=_fake_httpx_client(content=_REAL_PNG_BYTES)):
+            with patch("app.services.media_resolve.azure_blob_service.upload_bytes") as mock_upload:
+                _run(media_resolve.mirror_avatar_preview_to_azure(scenario, scenario.heygen_preview_image_url, db))
+
+        thumbnail_call = mock_upload.call_args_list[1]
+        assert thumbnail_call.args[0] == "avatars/PB-DOC-000001/PB-AVT-000001/thumbnail.png"
+        assert thumbnail_call.kwargs["content_type"] == "image/png"
+
+        assert scenario.azure_blob_name == "avatars/PB-DOC-000001/PB-AVT-000001/final.png"
+        assert scenario.azure_preview_blob_name == "avatars/PB-DOC-000001/PB-AVT-000001/thumbnail.png"
+        assert scenario.avatar_storage_status == "uploaded"
+
+    def test_falls_back_to_duplicating_final_blob_when_thumbnail_generation_fails(self):
         scenario = FakeScenario()
         db = FakeDB()
         with patch("app.services.media_resolve.httpx.AsyncClient", return_value=_fake_httpx_client(content=_REAL_PNG_BYTES)):
             with patch("app.services.media_resolve.azure_blob_service.upload_bytes"):
-                _run(media_resolve.mirror_avatar_preview_to_azure(scenario, scenario.heygen_preview_image_url, db))
+                with patch("app.services.media_resolve._generate_thumbnail_bytes", return_value=None):
+                    _run(media_resolve.mirror_avatar_preview_to_azure(scenario, scenario.heygen_preview_image_url, db))
 
         assert scenario.azure_blob_name == "avatars/PB-DOC-000001/PB-AVT-000001/final.png"
         assert scenario.azure_preview_blob_name == scenario.azure_blob_name
@@ -224,7 +245,8 @@ class TestMirrorOriginalPhotoToAzure:
         with patch("app.services.media_resolve.azure_blob_service.upload_bytes") as mock_upload:
             media_resolve.mirror_original_photo_to_azure(scenario, _REAL_PNG_BYTES, "image/png", db)
         mock_upload.assert_called_once_with(
-            "doctors/PB-DOC-000001/photos/PB-AVT-000001.png", _REAL_PNG_BYTES, content_type="image/png"
+            "doctors/PB-DOC-000001/photos/PB-AVT-000001.png", _REAL_PNG_BYTES,
+            content_type="image/png", cache_control=media_resolve.IMMUTABLE_CACHE_CONTROL
         )
         assert scenario.original_photo_azure_blob_name == "doctors/PB-DOC-000001/photos/PB-AVT-000001.png"
 
@@ -297,6 +319,106 @@ class TestResolveVideoPlaybackUrl:
         video.azure_blob_name = "videos/x.mp4"
         with patch("app.services.media_resolve.azure_blob_service.generate_read_sas_url", side_effect=RuntimeError("down")):
             assert media_resolve.resolve_video_playback_url(video) == video.video_url
+
+
+class TestResolveVideoDownloadUrl:
+    def test_returns_download_scoped_sas_when_uploaded(self):
+        video = FakeVideo()
+        video.storage_status = "uploaded"
+        video.azure_blob_name = "videos/PB-DOC-000001/PB-VID-000001.mp4"
+        with patch("app.services.media_resolve.azure_blob_service.generate_download_sas_url", return_value="https://download-sas") as mock_dl:
+            assert media_resolve.resolve_video_download_url(video) == "https://download-sas"
+        mock_dl.assert_called_once_with(video.azure_blob_name, expiry_minutes=15)
+
+    def test_returns_none_when_not_yet_uploaded(self):
+        video = FakeVideo()
+        assert media_resolve.resolve_video_download_url(video) is None
+
+    def test_returns_none_when_sas_generation_fails(self):
+        video = FakeVideo()
+        video.storage_status = "uploaded"
+        video.azure_blob_name = "videos/x.mp4"
+        with patch("app.services.media_resolve.azure_blob_service.generate_download_sas_url", side_effect=RuntimeError("down")):
+            assert media_resolve.resolve_video_download_url(video) is None
+
+
+# --- Video thumbnail (poster image) ---
+
+class TestMirrorVideoThumbnailToAzure:
+    def test_downloads_and_uploads_thumbnail(self):
+        video = FakeVideo()
+        db = FakeDB()
+        with patch("app.services.media_resolve.httpx.AsyncClient", return_value=_fake_httpx_client(content=_REAL_PNG_BYTES)):
+            with patch("app.services.media_resolve.azure_blob_service.upload_bytes") as mock_upload:
+                _run(media_resolve.mirror_video_thumbnail_to_azure(video, video.thumbnail_url, db))
+
+        mock_upload.assert_called_once()
+        args, kwargs = mock_upload.call_args
+        assert args[0] == "videos/PB-DOC-000001/PB-VID-000001/thumbnail.png"
+        assert kwargs["content_type"] == "image/png"
+        assert video.azure_thumbnail_blob_name == args[0]
+
+    def test_no_op_when_no_thumbnail_url(self):
+        video = FakeVideo()
+        db = FakeDB()
+        with patch("app.services.media_resolve.azure_blob_service.upload_bytes") as mock_upload:
+            _run(media_resolve.mirror_video_thumbnail_to_azure(video, None, db))
+        mock_upload.assert_not_called()
+        assert video.azure_thumbnail_blob_name is None
+
+    def test_download_failure_is_swallowed_not_raised(self):
+        video = FakeVideo()
+        db = FakeDB()
+        with patch("app.services.media_resolve.httpx.AsyncClient", return_value=_fake_httpx_client(status_code=404, content=b"")):
+            with patch("app.services.media_resolve.azure_blob_service.upload_bytes") as mock_upload:
+                _run(media_resolve.mirror_video_thumbnail_to_azure(video, video.thumbnail_url, db))
+        mock_upload.assert_not_called()
+        assert video.azure_thumbnail_blob_name is None
+
+    def test_azure_upload_failure_is_swallowed_not_raised(self):
+        """Must never flip video.status away from COMPLETED — thumbnail mirroring is best-effort only."""
+        video = FakeVideo()
+        db = FakeDB()
+        with patch("app.services.media_resolve.httpx.AsyncClient", return_value=_fake_httpx_client(content=_REAL_PNG_BYTES)):
+            with patch("app.services.media_resolve.azure_blob_service.upload_bytes", side_effect=RuntimeError("boom")):
+                _run(media_resolve.mirror_video_thumbnail_to_azure(video, video.thumbnail_url, db))
+        assert video.azure_thumbnail_blob_name is None
+
+
+class TestResolveVideoThumbnailUrl:
+    def test_returns_sas_when_mirrored(self):
+        video = FakeVideo()
+        video.azure_thumbnail_blob_name = "videos/PB-DOC-000001/PB-VID-000001/thumbnail.png"
+        with patch("app.services.media_resolve.azure_blob_service.generate_read_sas_url", return_value="https://sas-thumb"):
+            assert media_resolve.resolve_video_thumbnail_url(video) == "https://sas-thumb"
+
+    def test_falls_back_to_provider_thumbnail_url_when_not_mirrored(self):
+        video = FakeVideo()
+        assert media_resolve.resolve_video_thumbnail_url(video) == video.thumbnail_url
+
+    def test_falls_back_when_sas_generation_fails(self):
+        video = FakeVideo()
+        video.azure_thumbnail_blob_name = "videos/x/thumbnail.png"
+        with patch("app.services.media_resolve.azure_blob_service.generate_read_sas_url", side_effect=RuntimeError("down")):
+            assert media_resolve.resolve_video_thumbnail_url(video) == video.thumbnail_url
+
+
+# --- Avatar thumbnail resolution ---
+
+class TestResolveAvatarThumbnailUrl:
+    def test_returns_sas_for_thumbnail_blob_when_uploaded(self):
+        scenario = FakeScenario()
+        scenario.avatar_storage_status = "uploaded"
+        scenario.azure_blob_name = "avatars/PB-DOC-000001/PB-AVT-000001/final.png"
+        scenario.azure_preview_blob_name = "avatars/PB-DOC-000001/PB-AVT-000001/thumbnail.png"
+        with patch("app.services.media_resolve.azure_blob_service.generate_read_sas_url") as mock_sas:
+            mock_sas.return_value = "https://sas-thumb"
+            assert media_resolve.resolve_avatar_thumbnail_url(scenario) == "https://sas-thumb"
+        mock_sas.assert_called_once_with(scenario.azure_preview_blob_name)
+
+    def test_falls_back_to_full_resolution_when_not_uploaded(self):
+        scenario = FakeScenario()
+        assert media_resolve.resolve_avatar_thumbnail_url(scenario) == media_resolve.resolve_avatar_photo_url(scenario)
 
 
 # --- QR image resolution ---

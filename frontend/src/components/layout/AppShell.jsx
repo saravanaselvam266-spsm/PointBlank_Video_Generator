@@ -8,7 +8,7 @@ export const AppShell = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-slate-800 flex flex-col font-sans">
+    <div className="min-h-screen pb-atmosphere text-ink flex flex-col font-sans">
       <div className="flex flex-1">
         {/* Desktop Persistent Sidebar */}
         <div className="hidden lg:block">
